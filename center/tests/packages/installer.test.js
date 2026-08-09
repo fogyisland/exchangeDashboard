@@ -89,8 +89,10 @@ if (!HAS_MYSQL) {
       installer.installPackage({ db, dbKind, cacheRoot, zipBuffer: buf, logger }),
       (e) => e instanceof PkgError && e.code === 'PKG_DDL_FORBIDDEN'
     );
-    // Best-effort: schema should have been dropped
-    const dbs = await db.query('SHOW DATABASES LIKE ?', [`pkg_${evilName.replace(/-/g, '_')}`]);
+    // Best-effort: schema should have been dropped. `SHOW DATABASES LIKE ?`
+    // does not work through the prepared-statement protocol in MySQL, and
+    // the value is a safe identifier we constructed ourselves, so interpolate it.
+    const dbs = await db.query(`SHOW DATABASES LIKE 'pkg_${evilName.replace(/-/g, '_')}'`);
     assert.equal(dbs.length, 0, 'failed install must not leave a schema behind');
   });
 
@@ -120,7 +122,9 @@ if (!HAS_MYSQL) {
   test('uninstallPackage drops schema, removes registry rows, and cleans cache', async () => {
     const r = await installer.uninstallPackage({ db, dbKind, cacheRoot, name, confirmDropSchema: true, logger });
     assert.equal(r.ok, true);
-    const dbs = await db.query('SHOW DATABASES LIKE ?', [`pkg_${name.replace(/-/g, '_')}`]);
+    // `SHOW DATABASES LIKE ?` does not work through the prepared-statement protocol in MySQL.
+    // The value is a safe identifier we constructed ourselves, so interpolate it.
+    const dbs = await db.query(`SHOW DATABASES LIKE 'pkg_${name.replace(/-/g, '_')}'`);
     assert.equal(dbs.length, 0, 'schema should be dropped');
     const pkgRows = await db.query('SELECT * FROM packages WHERE name = ?', [name]);
     assert.equal(pkgRows.length, 0, 'registry row removed');

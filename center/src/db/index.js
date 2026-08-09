@@ -9,6 +9,7 @@ export async function init(dbConfig) {
   return {
     driver,
     query: (sql, params) => driverMod.query(driver, sql, params),
+    getConnection: () => driverMod.getConnection ? driverMod.getConnection(driver) : null,
     close: () => driverMod.close(driver)
   };
 }

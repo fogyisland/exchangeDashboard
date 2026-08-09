@@ -24,7 +24,7 @@ if (!HAS_MYSQL) {
 } else {
   const { init, close } = await import('../../src/db/index.js');
   const dbKind = 'mysql';
-  const db = await init({ dbKind, db: { host: process.env.TEST_MYSQL_HOST || 'localhost', port: 3306, user: 'root', password: '', database: 'exdashboard_test' } });
+  const db = await init({ dbKind, db: { host: process.env.TEST_MYSQL_HOST || 'localhost', port: Number(process.env.TEST_MYSQL_PORT) || 3306, user: process.env.TEST_MYSQL_USER || 'root', password: process.env.TEST_MYSQL_PASSWORD || '', database: process.env.TEST_MYSQL_DB || 'exdashboard_test' } });
   const cacheRoot = '/tmp/pkg-ingest-' + Date.now();
   const fs = await import('node:fs/promises');
   await fs.mkdir(cacheRoot, { recursive: true });
@@ -40,7 +40,10 @@ if (!HAS_MYSQL) {
     });
     assert.equal(out[0].recorded, true);
     assert.equal(out[0].rowCount, 2);
-    const rows = await db.query('SELECT * FROM ?? ORDER BY value', [`pkg_${name.replace(/-/g, '_')}.demo_metrics`]);
+    // mysql2's prepared-statement protocol does not substitute `??` table
+    // placeholders reliably across all server versions, and the table name is a
+    // safe identifier we constructed ourselves, so interpolate it directly.
+    const rows = await db.query(`SELECT * FROM \`pkg_${name.replace(/-/g, '_')}\`.\`demo_metrics\` ORDER BY value`);
     assert.equal(rows.length, 2);
     assert.equal(rows[0].value, 17);
     assert.equal(rows[1].value, 42);
@@ -64,7 +67,7 @@ if (!HAS_MYSQL) {
 
   test('routeExtensions agent_id comes from server (not from package row)', async () => {
     await ingest.routeExtensions({ db, agentId: 'server-id-123', capturedAt: new Date(), extensions: [{ packageName: name, metricTable: 'demo_metrics', rows: [{ agent_id: 'SPOOFED', value: 5 }] }] });
-    const rows = await db.query('SELECT agent_id FROM ?? WHERE value = ?', [`pkg_${name.replace(/-/g, '_')}.demo_metrics`, 5]);
+    const rows = await db.query(`SELECT agent_id FROM \`pkg_${name.replace(/-/g, '_')}\`.\`demo_metrics\` WHERE value = ?`, [5]);
     assert.equal(rows[0].agent_id, 'server-id-123', 'agent_id must come from server, not from package payload');
   });
 

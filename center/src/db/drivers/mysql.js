@@ -11,11 +11,34 @@ export async function open(dbConfig) {
     connectionLimit: 10,
     multipleStatements: false
   });
-  return { pool, kind: "mysql" };
+  return { pool, kind: "mysql", database: dbConfig.database };
 }
 
 export async function query(driver, sql, params = []) {
-  const [rows] = await driver.pool.execute(sql, params);
+  // MySQL's prepared-statement protocol (used by execute()) rejects DDL like
+  // CREATE TABLE / CREATE DATABASE. Fall back to the text protocol (query())
+  // when no params are bound so DDL works without changing call sites.
+  const fn = params && params.length > 0 ? driver.pool.execute : driver.pool.query;
+  const [rows] = await fn.call(driver.pool, sql, params);
+  return rows;
+}
+
+// Acquire a single dedicated connection. Required for operations that change
+//   connection-local state (e.g. `USE <schema>`) — pooled connections would
+//   scatter the state across pool members and lose it on the next acquire.
+//   Caller MUST release() the connection when done.
+export async function getConnection(driver) {
+  const conn = await driver.pool.getConnection();
+  return {
+    raw: conn,
+    query: (sql, params) => rawQuery(conn, sql, params),
+    release: () => conn.release()
+  };
+}
+
+async function rawQuery(conn, sql, params = []) {
+  const fn = params && params.length > 0 ? conn.execute : conn.query;
+  const [rows] = await fn.call(conn, sql, params);
   return rows;
 }
 

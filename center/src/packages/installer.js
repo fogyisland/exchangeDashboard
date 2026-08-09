@@ -75,6 +75,7 @@ export const installer = {
       if (cmp >= 0) throw new PkgError(existing.manifest?.version === manifest.version ? 'PKG_REINSTALL_BLOCKED' : 'PKG_DOWNGRADE_NOT_ALLOWED', `package ${manifest.name} already installed at ${existing.manifest?.version}`);
     }
     const schema = schemaName(manifest.name);
+    let conn = null;
     try {
       await db.query(createSchemaSql(dbKind, schema));
       await db.query(
@@ -82,21 +83,36 @@ export const installer = {
           ? `CREATE TABLE [${schema}].[schema_migrations] (filename VARCHAR(255) NOT NULL PRIMARY KEY, version VARCHAR(32) NOT NULL, applied_at DATETIME NOT NULL DEFAULT GETDATE())`
           : `CREATE TABLE \`${schema}\`.\`schema_migrations\` (filename VARCHAR(255) NOT NULL PRIMARY KEY, version VARCHAR(32) NOT NULL, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)`
       );
+      // For MySQL, acquire a dedicated connection so `USE <schema>` propagates
+      // across the package's migrations. Pooled connections scatter session
+      // state across pool members and would lose the schema between queries.
+      // MSSQL already requires fully-qualified identifiers in migrations, so
+      // it can use the regular pooled path.
+      const originalDb = dbKind === 'mysql' && db.driver && db.driver.database ? db.driver.database : null;
+      if (dbKind === 'mysql' && db.getConnection) {
+        conn = await db.getConnection();
+        await conn.query(`USE \`${schema}\``);
+      }
+      const exec = conn ? conn.query : db.query;
       for (const m of parsed.migrations) {
         try {
-          // LIMITATION: with connection pooling, each pool member has its own
-          // default database. `USE` only affects the connection that runs it.
-          // For production with pooled DB connections, package migrations
-          // should fully qualify table names (e.g. `pkg_demo.demo_metrics`).
-          if (dbKind !== 'mssql') {
-            await db.query(`USE \`${schema}\``);
-          }
-          await db.query(m.content);
+          await exec(m.content);
         } catch (e) {
           await dropSchemaBestEffort(db, dbKind, schema, logger);
           throw new PkgError('PKG_INSTALL_FAILED', `migration ${m.filename} failed: ${e.message}`, 500, { file: m.filename });
         }
-        await db.query(`INSERT INTO \`${schema}\`.\`schema_migrations\` (filename, version) VALUES (?, ?)`, [m.filename, manifest.version]);
+        await exec(`INSERT INTO \`${schema}\`.\`schema_migrations\` (filename, version) VALUES (?, ?)`, [m.filename, manifest.version]);
+      }
+      // Reset the dedicated connection's default database to the original
+      // before releasing it back to the pool. mysql2's pool returns connections
+      // in the same state they were released in, so a connection whose `USE`
+      // was changed to the package schema would later be handed out for
+      // registry queries — which expect the application's default database.
+      // MSSQL has no per-connection USE state to reset.
+      if (conn) {
+        if (originalDb) await conn.query(`USE \`${originalDb}\``);
+        conn.release();
+        conn = null;
       }
       await installedPackages.upsert(db, { name: manifest.name, type: manifest.type, manifest, enabled: 1, installedAt: new Date() });
       await packageVersions.upsert(db, { packageName: manifest.name, version: manifest.version, installedAt: new Date() });
@@ -109,6 +125,8 @@ export const installer = {
         throw new PkgError('PKG_INSTALL_FAILED', e.message, 500);
       }
       throw e;
+    } finally {
+      if (conn) conn.release();
     }
   },
   async uninstallPackage({ db, dbKind, cacheRoot, name, confirmDropSchema, logger }) {

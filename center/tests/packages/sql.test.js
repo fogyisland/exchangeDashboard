@@ -10,6 +10,7 @@ if (!HAS_MYSQL) {
   // Lazily import the driver + ajv only when running integration tests.
   const { init, close } = await import('../../src/db/index.js');
   const db = await init({ dbKind: 'mysql', db: { host: process.env.TEST_MYSQL_HOST || 'localhost', port: Number(process.env.TEST_MYSQL_PORT) || 3306, user: process.env.TEST_MYSQL_USER || 'root', password: process.env.TEST_MYSQL_PASSWORD || '', database: process.env.TEST_MYSQL_DB || 'exdashboard_test' } });
+  test.after(async () => { await close(db); });
 
   test('installedPackages.upsert + get round-trip', async () => {
     const name = `sql-upsert-${Date.now()}`;
@@ -20,7 +21,6 @@ if (!HAS_MYSQL) {
     assert.equal(r.type, 'timeseries');
     assert.deepEqual(r.manifest, { foo: 1 });
     assert.equal(r.enabled, 1);
-    await close(db);
   });
 
   test('installedPackages.get returns null for missing package', async () => {
@@ -34,7 +34,6 @@ if (!HAS_MYSQL) {
     const list = await installedPackages.list(db);
     const found = list.find((p) => p.name === name);
     assert.ok(found);
-    await close(db);
   });
 
   test('installedPackages.delete removes the package row', async () => {
@@ -43,7 +42,6 @@ if (!HAS_MYSQL) {
     await installedPackages.delete(db, name);
     const r = await installedPackages.get(db, name);
     assert.equal(r, null);
-    await close(db);
   });
 
   test('packageRuns.record inserts a run row', async () => {
@@ -53,7 +51,6 @@ if (!HAS_MYSQL) {
     const r = await db.query('SELECT * FROM package_runs WHERE package_name = ? ORDER BY id DESC LIMIT 1', [name]);
     assert.equal(r[0].status, 'installed');
     assert.equal(r[0].package_name, name);
-    await close(db);
   });
 
   test('packageVersions.upsert + delete round-trip', async () => {
@@ -65,6 +62,5 @@ if (!HAS_MYSQL) {
     await packageVersions.delete(db, name);
     const after = await db.query('SELECT * FROM package_versions WHERE package_name = ?', [name]);
     assert.equal(after.length, 0);
-    await close(db);
   });
 }
