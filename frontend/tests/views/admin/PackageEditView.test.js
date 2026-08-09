@@ -53,15 +53,29 @@ test('PackageEditView uninstall button calls packagesApi.uninstall after confirm
   await router.isReady();
   const wrapper = mount(PackageEditView, { global: { plugins: [router] } });
   await flushPromises();
-  // Find and check the confirm checkbox, then click uninstall
-  const checkbox = wrapper.find('input[type="checkbox"]');
-  if (checkbox.exists()) await checkbox.setValue(true);
   const { packagesApi } = await import('../../../src/api/packages.js');
   packagesApi.uninstall.mockClear();
-  // The actual click triggers confirm — accept either path
+
+  // Verify the confirm checkbox gates the button
+  const checkbox = wrapper.find('[data-testid="package-uninstall-confirm"]');
+  expect(checkbox.exists()).toBe(true);
   const uninstallBtn = wrapper.find('[data-testid="package-uninstall-btn"]');
-  if (uninstallBtn.exists()) await uninstallBtn.trigger('click');
+  expect(uninstallBtn.exists()).toBe(true);
+
+  // Before confirm: button should be disabled
+  expect(uninstallBtn.attributes('disabled')).toBeDefined();
+
+  // Check the confirm checkbox
+  await checkbox.setValue(true);
   await flushPromises();
-  // Either uninstall was called or the user needs to confirm first (modal gating)
-  expect(packagesApi.uninstall.mock.calls.length + 1).toBeGreaterThanOrEqual(1);
+
+  // After confirm: button should be enabled
+  expect(uninstallBtn.attributes('disabled')).toBeUndefined();
+
+  // Click the uninstall button
+  await uninstallBtn.trigger('click');
+  await flushPromises();
+
+  // Verify the API was called with the correct package name
+  expect(packagesApi.uninstall).toHaveBeenCalledWith('foo');
 });
