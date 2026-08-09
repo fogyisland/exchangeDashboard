@@ -12,7 +12,9 @@ const routes = [
     component: () => import('./components/AppLayout.vue'),
     children: [
       { path: '', component: () => import('./views/DashboardView.vue') },
-      { path: 'mailflow', component: () => import('./views/MailFlowView.vue') }
+      { path: 'mailflow', component: () => import('./views/MailFlowView.vue') },
+      { path: 'dag', component: () => import('./views/DagTopologyView.vue') },
+      { path: 'dag/grid', component: () => import('./views/DagGridView.vue') }
     ]
   },
   { path: '/:pathMatch(.*)*', component: NotFoundView }
