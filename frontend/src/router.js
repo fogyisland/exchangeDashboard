@@ -14,7 +14,8 @@ const routes = [
       { path: '', component: () => import('./views/DashboardView.vue') },
       { path: 'mailflow', component: () => import('./views/MailFlowView.vue') },
       { path: 'dag', component: () => import('./views/DagTopologyView.vue') },
-      { path: 'dag/grid', component: () => import('./views/DagGridView.vue') }
+      { path: 'dag/grid', component: () => import('./views/DagGridView.vue') },
+      { path: 'client-access', component: () => import('./views/ClientAccessView.vue') }
     ]
   },
   { path: '/:pathMatch(.*)*', component: NotFoundView }
