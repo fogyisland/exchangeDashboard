@@ -11,7 +11,9 @@ import { MailflowCollector } from './src/mailflow-collector.js';
 import { DagCollector } from './src/dag-collector.js';
 import { ServicesCollector } from './src/services-collector.js';
 import { ClientAccessCollector } from './src/clientaccess-collector.js';
+import { PackagesLoader } from './src/packages/loader.js';
 import { urlFor } from './src/url.js';
+import path from 'node:path';
 
 const configPath = process.argv[2] || process.env.APPSETTINGS_PATH || './appsettings.json';
 
@@ -41,6 +43,12 @@ const configPath = process.argv[2] || process.env.APPSETTINGS_PATH || './appsett
   const services = new ServicesCollector(perfmon);
   const clientAccess = new ClientAccessCollector(perfmon);
 
+  const packagesLoader = new PackagesLoader({
+    packagesDir: path.resolve(cfg.packages.dir),
+    logger
+  });
+  await packagesLoader.loadAll();
+
   const getSummary = () => identity;
   const getSnapshot = async () => {
     const capturedAt = new Date().toISOString();
@@ -65,6 +73,18 @@ const configPath = process.argv[2] || process.env.APPSETTINGS_PATH || './appsett
       clientAccessRows = await clientAccess.collect();
     } catch (e) { logger.warn({ err: e.message }, 'clientAccess collect failed'); }
 
+    const extensions = [];
+    for (const pkg of packagesLoader.listLoaded()) {
+      try {
+        const result = await packagesLoader.invokeCollect(pkg.name, { config: cfg, logger });
+        const rows = (result && result.rows) || [];
+        extensions.push({ packageName: pkg.name, metricTable: pkg.metricTable, rows });
+      } catch (e) {
+        logger.warn({ err: e.message, pkg: pkg.name }, 'package collect failed');
+        extensions.push({ packageName: pkg.name, metricTable: pkg.metricTable, rows: [] });
+      }
+    }
+
     return {
       agentId: cfg.agentId,
       hostname: identity.hostname,
@@ -73,7 +93,8 @@ const configPath = process.argv[2] || process.env.APPSETTINGS_PATH || './appsett
       dag: { members: [], copies: dagResult.copies || [] },
       services: servicesResult.services || [],
       clientAccess: clientAccessRows,
-      resources: servicesResult.resources || {}
+      resources: servicesResult.resources || {},
+      extensions
     };
   };
 

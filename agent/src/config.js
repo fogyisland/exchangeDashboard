@@ -21,6 +21,7 @@ export function defaultConfig() {
     logLevel: 'info',
     installPath: 'C:\\exdashboard',
     collectors: { mailflowIntervalMs: 30000, dagIntervalMs: 60000, servicesIntervalMs: 30000, clientaccessIntervalMs: 60000 },
-    localQueue: { dbPath: './queue.db', maxBackoffMs: 1800000 }
+    localQueue: { dbPath: './queue.db', maxBackoffMs: 1800000 },
+    packages: { dir: './packages' }
   };
 }
