@@ -52,9 +52,14 @@ export class PackagesLoader {
     const pkg = this.loaded.find((p) => p.name === name);
     if (!pkg) throw new Error(`package ${name} not loaded`);
     const ms = timeoutMs ?? pkg.timeoutMs;
-    return await Promise.race([
-      pkg.collector.collect(ctx),
-      new Promise((_, reject) => setTimeout(() => reject(new Error(`collect timeout after ${ms}ms`)), ms))
-    ]);
+    let timer;
+    try {
+      return await Promise.race([
+        pkg.collector.collect(ctx),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`collect timeout after ${ms}ms`)), ms); })
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }

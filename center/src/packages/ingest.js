@@ -18,7 +18,14 @@ export const ingest = {
         continue;
       }
       const schema = schemaName(ext.packageName);
-      const table = ext.metricTable;
+      // Use the installed manifest's metricTable, never the agent-supplied value.
+      // Otherwise a malicious agent could target any table in the package schema.
+      const installedTable = pkg.manifest.database.metricTable;
+      if (ext.metricTable !== installedTable) {
+        out.push({ packageName: ext.packageName, skipped: 'metricTable mismatch', error: 'METRIC_TABLE_MISMATCH' });
+        continue;
+      }
+      const table = installedTable;
       const columns = Object.keys(pkg.manifest.database.metricColumns);
       const userCols = columns.filter((c) => c !== 'agent_id' && c !== 'ts');
       for (const row of ext.rows || []) {

@@ -84,6 +84,13 @@ export const installer = {
       );
       for (const m of parsed.migrations) {
         try {
+          // LIMITATION: with connection pooling, each pool member has its own
+          // default database. `USE` only affects the connection that runs it.
+          // For production with pooled DB connections, package migrations
+          // should fully qualify table names (e.g. `pkg_demo.demo_metrics`).
+          if (dbKind !== 'mssql') {
+            await db.query(`USE \`${schema}\``);
+          }
           await db.query(m.content);
         } catch (e) {
           await dropSchemaBestEffort(db, dbKind, schema, logger);

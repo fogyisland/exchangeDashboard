@@ -38,14 +38,14 @@ ExDashboard/
 │   ├── appsettings.example.json
 │   ├── db/schema/          — SQL migration files (001-initial.sql)
 │   ├── src/                — routes, services, db drivers, auth, init wizard
-│   └── tests/              — node:test, 42 specs
+│   └── tests/              — node:test, 102 specs
 ├── agent/                  — Node.js agent (runs on each Exchange Server)
 │   ├── appsettings.example.json
 │   ├── src/                — collectors, heartbeat, reporter, local queue
-│   └── tests/              — node:test, 9 specs
+│   └── tests/              — node:test, 20 specs
 ├── frontend/               — Vue 3 admin UI
 │   ├── src/                — views, components, api, stores, router
-│   ├── tests/              — vitest, 48 specs
+│   ├── tests/              — vitest, 57 specs
 │   └── vite.config.js
 ├── scripts/                — PowerShell install / uninstall / update / smoke
 ├── start.bat / start.ps1   — NSSM install + console launch
@@ -58,11 +58,12 @@ ExDashboard/
 
 ## What Works
 
-### Tested at 99/99 green
-- **Backend unit + integration:** center (42) + agent (9) cover auth,
+### Tested at 179/179 green
+- **Backend unit + integration:** center (102) + agent (20) cover auth,
   init wizard, schema migrations, agent ingest, retention purge, all
   five collector streams, local-queue retry, three-port server split,
-  RBAC, error handling.
+  RBAC, error handling, package install/uninstall/enable/disable,
+  package ingest routing, package loader, package manifest validation.
 - **Frontend:** vitest covers every component (DagGrid, ServerCard,
   CounterTile, QueueTable, ClientAccessTile, ServiceHealthBar,
   StuckMessagesPanel, AppLayout) plus view-level snapshots for all
@@ -140,6 +141,7 @@ These were deferred from the original plan and remain as TODOs in code:
 - **No per-package permissions** — any admin can install/uninstall any package.
 - **Failed DROP SCHEMA on uninstall leaves the schema** — admin must drop manually via `DROP DATABASE pkg_<name>` or `DROP SCHEMA pkg_<name>`. Logged to `package_runs.output` for follow-up.
 - **Single-machine deployment assumption (v1)** — center writes to `<packagesCacheDir>` and agent reads from `<packages.dir>`. For v1 both must resolve to the same physical directory (typically `C:\ExDashboard\packages\` on co-located Windows deployments). Multi-machine agent sync deferred.
+- **MySQL package migration schema scoping is best-effort under pooling** — the installer runs `USE \`pkg_<name>\`` before each user migration so unqualified `CREATE TABLE foo (...)` lands in the package's database. However, with connection pooling each pool member has its own default database, so the `USE` only affects the connection that runs it. For production with pooled DB connections, package migrations should fully qualify table names (e.g. `CREATE TABLE pkg_demo.demo_metrics (...)`). The explicit `schema_migrations` INSERT is already schema-qualified and is unaffected.
 
 ---
 
@@ -152,7 +154,7 @@ cd D:\ToolDevelop\ExDashboard
 npm test --workspaces --if-present
 ```
 
-Expected: `42 + 9 + 48 = 99` tests pass.
+Expected: `102 + 20 + 57 = 179` tests pass.
 
 ### Build the frontend
 
