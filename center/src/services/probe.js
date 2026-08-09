@@ -1,10 +1,13 @@
 import { getOfflineAgents } from './heartbeat-report.js';
 
-// TODO: For SQL Server use `DATEADD(DAY, -?, GETDATE())`. v1 supports mysql.
+// Portable cutoff: compute the timestamp in JS and pass it as a bound
+// parameter. Works on both MySQL and SQL Server without dialect-specific
+// date arithmetic in the query.
 async function purgeOld(db, days, table) {
+  const cutoff = new Date(Date.now() - days * 86400_000);
   await db.query(
-    `DELETE FROM ${table} WHERE captured_at < (NOW() - INTERVAL ? DAY)`,
-    [days]
+    `DELETE FROM ${table} WHERE captured_at < ?`,
+    [cutoff]
   );
 }
 

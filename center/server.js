@@ -33,10 +33,7 @@ import { adminRouter } from './src/routes/admin.js';
 // the dags service rather than a dedicated DC summary endpoint).
 import { dagRouter } from './src/routes/dag.js';
 import { lockoutRouter } from './src/routes/lockout.js';
-// schema-migrations.js is currently disabled at the mount site (see TODO in
-// the runtime IIFE) because it imports `requireAuth` from user-auth.js,
-// which only exports a `userAuth` factory. Re-enable after fixing that
-// import — the route module itself is untouched.
+import { schemaMigrationsRouter } from './src/routes/schema-migrations.js';
 import { heartbeatReportRouter } from './src/routes/heartbeat-report.js';
 
 import { initRouter } from './src/init/router.js';
@@ -217,10 +214,16 @@ if (invokedDirectly) {
       // stub (no per-route auth). Wire requireAuth/requirePerm once the
       // lockout event table is populated by the agent collector.
       app.use('/api/lockout', lockoutRouter());
-      // TODO: schema-migrations route disabled — requires fix to import { requireAuth } from '../auth/user-auth.js'
-      //       which exports `userAuth` factory, not `requireAuth`. Wire up after the import bug is fixed.
-      // const { schemaMigrationsRouter } = await import('./src/routes/schema-migrations.js');
-      // app.use('/api/schema-migrations', schemaMigrationsRouter({ db }));
+      // Schema-migrations admin route. The router factory expects a
+      // pre-built requireAuth middleware (the user-auth.js module exports
+      // a `userAuth` factory rather than a bare requireAuth), so we build
+      // it here using the same db/jwtSecret the authRouter uses.
+      const schemaMigrationsAuth = userAuth({
+        db,
+        jwtSecret: finalConfig.jwt.secret,
+        expiresInSeconds: finalConfig.jwt.expiresInSeconds
+      }).requireAuth;
+      app.use('/api/schema-migrations', schemaMigrationsRouter({ db, requireAuth: schemaMigrationsAuth }));
       app.use('/api/heartbeat-report', heartbeatReportRouter({ db, config: finalConfig }));
       // TODO: implemented in later task — wire the packageRouter/orphanRouter
       // once `center/src/packages/` exists (ExDashboard has no package
