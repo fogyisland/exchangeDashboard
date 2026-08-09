@@ -7,7 +7,14 @@ import NotFoundView from './views/NotFoundView.vue';
 const routes = [
   { path: '/init', component: InitWizardView, meta: { public: true } },
   { path: '/login', component: LoginView, meta: { public: true } },
-  { path: '/', component: { template: '<div class="p-24">Dashboard — pending</div>' } },
+  {
+    path: '/',
+    component: () => import('./components/AppLayout.vue'),
+    children: [
+      { path: '', component: () => import('./views/DashboardView.vue') },
+      { path: 'mailflow', component: () => import('./views/MailFlowView.vue') }
+    ]
+  },
   { path: '/:pathMatch(.*)*', component: NotFoundView }
 ];
 
