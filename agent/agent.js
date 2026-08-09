@@ -11,6 +11,7 @@ import { MailflowCollector } from './src/mailflow-collector.js';
 import { DagCollector } from './src/dag-collector.js';
 import { ServicesCollector } from './src/services-collector.js';
 import { ClientAccessCollector } from './src/clientaccess-collector.js';
+import { urlFor } from './src/url.js';
 
 const configPath = process.argv[2] || process.env.APPSETTINGS_PATH || './appsettings.json';
 
@@ -23,9 +24,10 @@ const configPath = process.argv[2] || process.env.APPSETTINGS_PATH || './appsett
   cfg.agentId = identity.agentId;
   logger.info({ agentId: cfg.agentId, hostname: identity.hostname }, 'discovered');
 
-  // POST discover to center (best-effort, retried on next tick)
+  // POST discover to center (best-effort, retried on next tick). Discover
+  // is mounted on reportApp (8082) alongside /report — see server.js.
   try {
-    const url = cfg.center.baseUrl.replace(/\/$/, '') + cfg.center.discoverPath;
+    const url = urlFor(cfg.center.baseUrl, cfg.center.reportPort, cfg.center.discoverPath);
     await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(identity) });
   } catch (e) { logger.warn({ err: e.message }, 'discover post failed'); }
 

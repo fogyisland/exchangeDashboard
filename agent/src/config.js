@@ -7,6 +7,8 @@ export function defaultConfig() {
   return {
     center: {
       baseUrl: 'http://localhost:8080',
+      heartbeatPort: 8081,
+      reportPort: 8082,
       heartbeatPath: '/api/agent/heartbeat',
       reportPath: '/api/agent/report',
       discoverPath: '/api/agent/discover',

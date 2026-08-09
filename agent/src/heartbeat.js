@@ -1,8 +1,9 @@
 import axios from 'axios';
+import { urlFor } from './url.js';
 
 export function startHeartbeat({ config, logger, getSummary }) {
   let stopped = false;
-  const url = config.center.baseUrl.replace(/\/$/, '') + config.center.heartbeatPath;
+  const url = urlFor(config.center.baseUrl, config.center.heartbeatPort, config.center.heartbeatPath);
   const tick = async () => {
     if (stopped) return;
     try {

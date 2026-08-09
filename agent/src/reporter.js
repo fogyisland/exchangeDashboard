@@ -1,8 +1,9 @@
 import axios from 'axios';
+import { urlFor } from './url.js';
 
 export function startReporter({ config, logger, queue, getSnapshot }) {
   let stopped = false;
-  const url = config.center.baseUrl.replace(/\/$/, '') + config.center.reportPath;
+  const url = urlFor(config.center.baseUrl, config.center.reportPort, config.center.reportPath);
 
   const sendOne = async (item) => {
     try {
