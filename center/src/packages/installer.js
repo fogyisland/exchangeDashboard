@@ -58,7 +58,7 @@ async function dropSchemaBestEffort(db, dbKind, schema, logger) {
 export const installer = {
   async installPackage({ db, dbKind, cacheRoot, zipBuffer, logger }) {
     const parsed = parseZip(zipBuffer);
-    const { manifest } = validateManifest(parsed.manifest);
+    const { value: manifest } = validateManifest(parsed.manifest);
     for (const m of parsed.migrations) {
       const r = scanSql(m.content);
       if (!r.ok) throw new PkgError('PKG_DDL_FORBIDDEN', `SQL blocked by sandbox: ${r.blocked}`, 400, { file: m.filename, pattern: r.blocked });
