@@ -5,14 +5,18 @@
       <nav>
         <router-link to="/admin" exact-active-class="active">Overview</router-link>
         <router-link to="/admin/users" active-class="active">Users</router-link>
+        <router-link to="/admin/roles" active-class="active">Roles</router-link>
         <router-link to="/admin/config" active-class="active">Config</router-link>
         <router-link to="/admin/audit" active-class="active">Audit</router-link>
         <router-link to="/admin/servers" active-class="active">Servers</router-link>
-        <router-link to="/admin/dags" active-class="active">DAGs</router-link>
-        <router-link to="/admin/dbs" active-class="active">Databases</router-link>
+        <router-link to="/admin/dags-catalog" active-class="active">DAGs</router-link>
+        <router-link to="/admin/dbs-catalog" active-class="active">Databases</router-link>
         <router-link to="/admin/dag-replication" active-class="active">DAG Replication</router-link>
+        <router-link to="/admin/migrations" active-class="active">Migrations</router-link>
         <router-link to="/admin/ports" active-class="active">Ports</router-link>
         <router-link to="/admin/heartbeat-report" active-class="active">Heartbeat Report</router-link>
+        <router-link to="/admin/packages" active-class="active">Packages</router-link>
+        <router-link to="/admin/packages/registry" active-class="active">Registry</router-link>
       </nav>
     </aside>
     <main class="content">

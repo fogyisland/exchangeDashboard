@@ -19,6 +19,39 @@ const routes = [
       { path: 'servers-overview', component: () => import('./views/ServersOverviewView.vue') }
     ]
   },
+  {
+    path: '/admin',
+    component: () => import('./components/AdminLayout.vue'),
+    meta: { perm: 'admin' },
+    children: [
+      { path: '', component: () => import('./views/admin/AdminOverviewView.vue') },
+      { path: 'users', component: () => import('./views/admin/UsersView.vue') },
+      { path: 'roles', component: () => import('./views/admin/RolesView.vue') },
+      { path: 'config', component: () => import('./views/admin/ConfigView.vue') },
+      { path: 'audit', component: () => import('./views/admin/AuditView.vue') },
+      { path: 'dags-catalog', component: () => import('./views/admin/DagsCatalogView.vue') },
+      { path: 'dbs-catalog', component: () => import('./views/admin/DbsCatalogView.vue') },
+      {
+        path: 'dag-replication',
+        component: () => import('./views/admin/DagReplicationMatrixView.vue')
+      },
+      { path: 'migrations', component: () => import('./views/admin/SchemaMigrationsView.vue') },
+      { path: 'ports', component: () => import('./views/admin/PortsView.vue') },
+      {
+        path: 'heartbeat-report',
+        component: () => import('./views/admin/HeartbeatReportMonitorView.vue')
+      },
+      { path: 'packages', component: () => import('./views/admin/PackagesView.vue') },
+      {
+        path: 'packages/registry',
+        component: () => import('./views/admin/RegistryView.vue')
+      },
+      {
+        path: 'packages/:name',
+        component: () => import('./views/admin/PackageEditView.vue')
+      }
+    ]
+  },
   { path: '/:pathMatch(.*)*', component: NotFoundView }
 ];
 
