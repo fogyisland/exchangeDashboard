@@ -16,7 +16,9 @@ const routes = [
       { path: 'dag', component: () => import('./views/DagTopologyView.vue') },
       { path: 'dag/grid', component: () => import('./views/DagGridView.vue') },
       { path: 'client-access', component: () => import('./views/ClientAccessView.vue') },
-      { path: 'servers-overview', component: () => import('./views/ServersOverviewView.vue') }
+      { path: 'servers-overview', component: () => import('./views/ServersOverviewView.vue') },
+      { path: 'dashboard/metrics', component: () => import('./views/MetricDashboardView.vue') },
+      { path: 'lockout-troubleshooting', component: () => import('./views/LockoutTroubleshootingView.vue') }
     ]
   },
   {
