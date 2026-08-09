@@ -259,6 +259,9 @@ Total: 42 commits on `master`.
    the `{databases: []}` empty-state.
 2. Implement lockout diagnose logic (AD event log correlation).
 3. Add Playwright E2E covering the init wizard + agent install.
-4. Add `packageRouter` + `orphanRouter` to center (referenced in
-   `docs/operations/runbook.md`).
-5. Wire a synthetic agent for offline smoke testing.
+4. **Add per-package upgrade flow** — currently requires uninstall + reinstall; PKG_REINSTALL_BLOCKED prevents in-place upgrade. Needs DDL diff application and safe migration sequencing.
+5. **Wire per-package agent refresh** — agent reads installed packages only on startup. New packages require agent restart to be discovered.
+6. **Add per-package permissions / RBAC scopes** — currently any admin can install/uninstall any package.
+7. **Support multi-machine agent sync** — center writes to `<packagesCacheDir>`; agent reads from `<packages.dir>`. For multi-host deployments both must resolve to the same physical directory (typically `C:\ExDashboard\packages\`) until a registry-pull protocol lands.
+8. **Tighten DDL sandbox** — regex scanner is best-effort; future work could move to a token-aware parser.
+9. Wire a synthetic agent for offline smoke testing.
