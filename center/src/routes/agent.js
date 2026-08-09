@@ -1,4 +1,5 @@
 import express from 'express';
+import { ingest } from '../packages/ingest.js';
 
 export function agentRouter({ config, logger, mount = 'web' }) {
   const r = express.Router();
@@ -24,7 +25,7 @@ export function agentRouter({ config, logger, mount = 'web' }) {
 
   if (mount === 'report' || mount === 'web') {
     r.post('/report', async (req, res) => {
-      const { agentId, hostname, capturedAt, queues = [], dag = {}, services = [], clientAccess = [], resources = {} } = req.body || {};
+      const { agentId, hostname, capturedAt, queues = [], dag = {}, services = [], clientAccess = [], resources = {}, extensions = [] } = req.body || {};
       if (!agentId || !hostname) return res.status(400).json({ error: { code: 'VALIDATION_FAILED', message: 'agentId + hostname required' } });
 
       const db = req.app.locals.db;
@@ -71,6 +72,7 @@ export function agentRouter({ config, logger, mount = 'web' }) {
           );
         }
         await db.query('UPDATE agents SET last_report_at = NOW() WHERE agent_id = ?', [agentId]);
+        await ingest.routeExtensions({ db, agentId, capturedAt, extensions });
         res.status(202).json({ ok: true });
       } catch (e) {
         logger.error({ err: e.message }, 'report ingest failed');

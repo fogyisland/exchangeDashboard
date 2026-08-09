@@ -35,6 +35,7 @@ import { dagRouter } from './src/routes/dag.js';
 import { lockoutRouter } from './src/routes/lockout.js';
 import { schemaMigrationsRouter } from './src/routes/schema-migrations.js';
 import { heartbeatReportRouter } from './src/routes/heartbeat-report.js';
+import { packagesRouter } from './src/packages/router.js';
 
 import { initRouter } from './src/init/router.js';
 import { hasMarker } from './src/init/marker.js';
@@ -223,9 +224,11 @@ if (invokedDirectly) {
       app.use('/api/lockout', lockoutRouter({ requireAuth }));
       app.use('/api/schema-migrations', schemaMigrationsRouter({ db, requireAuth }));
       app.use('/api/heartbeat-report', heartbeatReportRouter({ db, config: finalConfig }));
-      // TODO: implemented in later task — wire the packageRouter/orphanRouter
-      // once `center/src/packages/` exists (ExDashboard has no package
-      // system in the bootstrap yet — skip until Task 7 adds it).
+      app.use('/api/admin/packages', packagesRouter({
+        db,
+        requireAuth,
+        config: finalConfig
+      }));
 
       const handles = startServers({
         webApp: apps.webApp,
