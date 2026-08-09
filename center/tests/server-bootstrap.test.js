@@ -1,7 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import pino from 'pino';
+import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs/promises';
 import { buildServerApps } from '../server.js';
+import { hasMarker, writeMarker } from '../src/init/marker.js';
 
 // Use a real pino logger (with .child()) because createApp wires
 // pino-http({logger}) which calls prevLogger.child() on every request.
@@ -83,3 +87,72 @@ test('buildServerApps: heartbeatApp and reportApp accept HTTP requests', async (
   assert.equal(reportStatus, 200);
 });
 
+// --- Blockers 1 & 2: ESM-fs and registry-marker tests ----------------------
+
+test('center/server.js does NOT use CommonJS require() — ESM-only', async () => {
+  // Blockers 1: require('node:fs') inside server.js throws ReferenceError
+  // under "type": "module". Read the source and assert no `require(` token
+  // appears (comments are OK — they don't execute). This is a static check
+  // that survives refactors as long as server.js stays ESM-only.
+  const { fileURLToPath } = await import('node:url');
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const serverPath = path.resolve(here, '..', 'server.js');
+  const src = await fs.readFile(serverPath, 'utf8');
+  // Strip line comments and block comments so a comment like
+  // `// see require() docs` doesn't trip the check.
+  const stripped = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  assert.doesNotMatch(
+    stripped,
+    /\brequire\s*\(/,
+    'server.js must not contain CommonJS require(); use ESM imports only'
+  );
+});
+
+test('hasMarker accepts an injected _checkRegistry function (dependency injection)', () => {
+  // The new hasMarker contract: signature is
+  //   hasMarker({ configPath, _checkRegistry })
+  // where _checkRegistry() returns true if the Windows registry key is
+  // present (REG_DWORD 0x1). When omitted, hasMarker falls back to the
+  // existing .env-only check (preserves non-Windows behavior).
+  // Just verifying the function is callable with the extra field — no
+  // assertion on platform behavior here, only that the signature accepts it.
+  assert.equal(typeof hasMarker, 'function');
+  // Calling without _checkRegistry must not throw (non-Windows path).
+  // Use a config path that surely has no .env file so the result is `false`.
+  const result = hasMarker({
+    configPath: path.join(os.tmpdir(), 'definitely-not-exists-' + Date.now() + '.json'),
+    _checkRegistry: () => false
+  });
+  assert.equal(result, false);
+});
+
+test('hasMarker returns true when _checkRegistry returns true (Windows marker)', () => {
+  // Simulate the Windows registry hit by injecting a checker that returns
+  // true. Even without a .env file, hasMarker must report true.
+  const result = hasMarker({
+    configPath: path.join(os.tmpdir(), 'no-env-here-' + Date.now() + '.json'),
+    _checkRegistry: () => true
+  });
+  assert.equal(result, true, 'hasMarker must honor the injected registry check');
+});
+
+test('hasMarker returns false when .env missing AND _checkRegistry returns false', () => {
+  const result = hasMarker({
+    configPath: path.join(os.tmpdir(), 'still-missing-' + Date.now() + '.json'),
+    _checkRegistry: () => false
+  });
+  assert.equal(result, false);
+});
+
+test('writeMarker + hasMarker round-trip works with injected registry stub', async () => {
+  // On non-Windows or in test, the registry write in writeMarker is a
+  // no-op (it short-circuits when process.platform !== 'win32'). So the
+  // injected _checkRegistry must be the path the test exercises.
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mk-rr-'));
+  const cfg = path.join(dir, 'appsettings.json');
+  await fs.writeFile(cfg, '{}');
+  await writeMarker({ configPath: cfg });
+  assert.equal(hasMarker({ configPath: cfg, _checkRegistry: () => false }), true);
+});

@@ -15,6 +15,7 @@
 // the IIFE.
 
 import express from 'express';
+import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import pino from 'pino';
 
@@ -32,11 +33,10 @@ import { adminRouter } from './src/routes/admin.js';
 // the dags service rather than a dedicated DC summary endpoint).
 import { dagRouter } from './src/routes/dag.js';
 import { lockoutRouter } from './src/routes/lockout.js';
-// schema-migrations.js has a pre-existing import bug
-// (`import { requireAuth } from 'user-auth'` — that module exports `userAuth`
-// as a factory, not a named `requireAuth`). Lazy-import below so the
-// buildServerApps import-graph stays clean for tests. See TODO at the
-// mount site for the planned fix.
+// schema-migrations.js is currently disabled at the mount site (see TODO in
+// the runtime IIFE) because it imports `requireAuth` from user-auth.js,
+// which only exports a `userAuth` factory. Re-enable after fixing that
+// import — the route module itself is untouched.
 import { heartbeatReportRouter } from './src/routes/heartbeat-report.js';
 
 import { initRouter } from './src/init/router.js';
@@ -130,7 +130,7 @@ if (invokedDirectly) {
     const markerLocked = hasMarker({ configPath });
 
     let config = null;
-    if (defaultConfig && require('node:fs').existsSync(configPath)) {
+    if (defaultConfig && fs.existsSync(configPath)) {
       try {
         const loaded = await import('./src/config.js').then(m => m.loadConfigOrNull ? m.loadConfigOrNull(configPath) : null);
         if (loaded && loaded.config) config = loaded.config;
@@ -217,12 +217,10 @@ if (invokedDirectly) {
       // stub (no per-route auth). Wire requireAuth/requirePerm once the
       // lockout event table is populated by the agent collector.
       app.use('/api/lockout', lockoutRouter());
-      // TODO: implemented in later task — schema-migrations.js has a
-      // pre-existing bad named import (`requireAuth` from a module that
-      // exports `userAuth`). Lazy-import here so the bug doesn't break
-      // server bootstrap; fix the route file in a follow-up.
-      const { schemaMigrationsRouter } = await import('./src/routes/schema-migrations.js');
-      app.use('/api/schema-migrations', schemaMigrationsRouter({ db }));
+      // TODO: schema-migrations route disabled — requires fix to import { requireAuth } from '../auth/user-auth.js'
+      //       which exports `userAuth` factory, not `requireAuth`. Wire up after the import bug is fixed.
+      // const { schemaMigrationsRouter } = await import('./src/routes/schema-migrations.js');
+      // app.use('/api/schema-migrations', schemaMigrationsRouter({ db }));
       app.use('/api/heartbeat-report', heartbeatReportRouter({ db, config: finalConfig }));
       // TODO: implemented in later task — wire the packageRouter/orphanRouter
       // once `center/src/packages/` exists (ExDashboard has no package
