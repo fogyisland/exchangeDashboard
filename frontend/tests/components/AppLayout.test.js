@@ -7,12 +7,23 @@ import AppLayout from '../../src/components/AppLayout.vue';
 import { useAuthStore } from '../../src/stores/auth.js';
 
 function makeRouter() {
+  // AppLayout's nav links point at the real dashboard routes (/mailflow,
+  // /dag, /client-access, /servers-overview, /dashboard/metrics,
+  // /lockout-troubleshooting). Register stubs for each so vue-router
+  // doesn't emit "No match found" warnings during mount.
+  const stub = (name) => ({ template: `<div class="x">${name}</div>` });
   return createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/', component: { template: '<div class="x">home</div>' } },
-      { path: '/admin', component: { template: '<div class="x">admin</div>' } },
-      { path: '/login', component: { template: '<div class="x">login</div>' } }
+      { path: '/', component: stub('home') },
+      { path: '/admin', component: stub('admin') },
+      { path: '/login', component: stub('login') },
+      { path: '/mailflow', component: stub('mailflow') },
+      { path: '/dag', component: stub('dag') },
+      { path: '/client-access', component: stub('client-access') },
+      { path: '/servers-overview', component: stub('servers-overview') },
+      { path: '/dashboard/metrics', component: stub('metrics') },
+      { path: '/lockout-troubleshooting', component: stub('lockout') }
     ]
   });
 }
