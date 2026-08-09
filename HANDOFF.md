@@ -90,6 +90,25 @@ ExDashboard/
   gz), `echarts` (echarts + zrender, ~1.14 MB / 382 KB gz — lazy
   loaded by chart views), `index` (app code, ~60 KB / 23 KB gz).
 
+### Package system (self-contained monitoring packages)
+
+Admin can upload a ZIP containing `manifest.json` + `collector.js` + `migrations/*.sql` via the admin UI. Center creates a `pkg_<name>` schema namespace per install, applies the package's DDL through a regex-based sandbox (DDL only — DML/DROP/cross-schema/cross-package blocked), caches files to `<packagesCacheDir>/<name>/current/`, and routes agent-reported extension rows into `pkg_<name>.<metricTable>`. Agent loads installed packages via dynamic import on startup, includes `extensions: []` in its 60s snapshot.
+
+#### What's wired end-to-end
+
+- `POST /api/admin/packages/install` (multipart) → install flow → schema created → tables created → registry rows inserted → files cached.
+- `DELETE /api/admin/packages/:name?confirmDropSchema=true` → drop schema (best-effort) → registry cleanup → cache cleanup.
+- `POST /api/admin/packages/:name/enable|disable` → toggle without uninstall.
+- `GET /api/admin/packages` and `/api/admin/packages/:name` → list / show.
+- Agent: `PackagesLoader.loadAll()` runs once on agent startup; per-snapshot `extensions` array carries rows from each loaded package; failures isolated per-package.
+
+#### Trust model
+
+- **No code signing.** Admin is responsible for vetting the package before upload.
+- DDL sandbox blocks the most common accidental damage (DROP, DML, cross-schema, cross-package). It does NOT substitute for trust — a malicious package author can still write a CREATE TABLE that fills the disk.
+- The package's `collector.js` runs in the agent's Node.js process. A malicious collector could read arbitrary files, make network calls, etc.
+- Admin UI surfaces a banner ("未签名包 — install 前请审查 manifest + migrations") at upload time. [Banner is a TODO for the UI task; documented for visibility.]
+
 ---
 
 ## Known Limitations / Not-Yet-Done
@@ -115,10 +134,12 @@ These were deferred from the original plan and remain as TODOs in code:
 - **Frontend has no Playwright/Cypress** — coverage is component +
   view-level vitest only. UI regressions on interaction paths (clicks,
   form submissions beyond the Lockout form) are not guarded.
-- **`packageRouter` and `orphanRouter` not wired** — referenced in
-  `center/server.js` TODO comments. The center has no package-system
-  bootstrap. The frontend has `/admin/packages*` routes but the API
-  stubs return empty data.
+- **No package upgrade flow** — admin must uninstall + reinstall to upgrade; PKG_REINSTALL_BLOCKED enforces this. DDL diff application deferred.
+- **DDL sandbox is regex-based** — less rigorous than a token-by-token scanner. Edge-case syntax may slip past and fail at apply time (best-effort DROP SCHEMA cleans up).
+- **No automatic agent refresh on package install** — agent reads installed packages on startup; new packages require agent restart to be discovered.
+- **No per-package permissions** — any admin can install/uninstall any package.
+- **Failed DROP SCHEMA on uninstall leaves the schema** — admin must drop manually via `DROP DATABASE pkg_<name>` or `DROP SCHEMA pkg_<name>`. Logged to `package_runs.output` for follow-up.
+- **Single-machine deployment assumption (v1)** — center writes to `<packagesCacheDir>` and agent reads from `<packages.dir>`. For v1 both must resolve to the same physical directory (typically `C:\ExDashboard\packages\` on co-located Windows deployments). Multi-machine agent sync deferred.
 
 ---
 
@@ -168,6 +189,20 @@ The agent discovers its identity, posts `/api/agent/discover` to the
 center on port 8082, then starts heartbeating on port 8081 and
 reporting on port 8082.
 
+### Install a monitoring package
+
+1. Build the package ZIP locally: `manifest.json` + `collector.js` + `migrations/*.sql`.
+2. Validate against the spec's manifest schema (run ajv validate locally).
+3. Open `http://center:8080/admin/packages` in the admin UI.
+4. Click "Upload" → select the ZIP → confirm.
+5. Restart any agents that need to load the new package.
+
+### Uninstall a monitoring package
+
+1. Open `http://center:8080/admin/packages/<name>`.
+2. Check "I understand..." → click "Uninstall".
+3. Restart agents if you want them to drop the in-memory package reference.
+
 ---
 
 ## Key File Pointers
@@ -192,6 +227,10 @@ reporting on port 8082.
 | NSSM scripts | `scripts/install-{center,agent}.ps1`, `scripts/uninstall-*.ps1`, `scripts/update-*.ps1` |
 | Operations docs | `docs/operations/{deployment,runbook,troubleshooting}.md` |
 | SDD ledger | `.superpowers/sdd/2026-08-09-exchange-dashboard/progress.md` |
+| Center package sandbox | `center/src/packages/{errors,ddl-sandbox,manifest,storage,sql,installer,ingest,router}.js` |
+| Agent package loader | `agent/src/packages/{manifest,loader}.js` |
+| Package schema | `pkg_<name>` (created at install time) |
+| Package cache | `<packagesCacheDir>/<name>/current/` (center) / `<packages.dir>/<name>/current/` (agent) |
 
 ---
 
