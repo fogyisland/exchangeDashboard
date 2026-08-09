@@ -11,8 +11,8 @@
 5. [首次启动向导](#首次启动向导)
 6. [服务管理](#服务管理)
 7. [升级与回滚](#升级与回滚)
-8. [自定义端口健康检查（migration 003）](#自定义端口健康检查migration-003)
-9. [升级到 v2.0+（包系统 / 插件系统）](#升级到-v20包系统--插件系统)
+8. [自定义端口健康检查](#自定义端口健康检查)
+9. [升级到 v2.0+（包系统 / 插件系统 — planned）](#升级到-v20包系统--插件系统--planned)
 10. [本地 production preview（无服务）](#本地-production-preview无服务)
 11. [故障排查](#故障排查)
 12. [Green Bundle（publish/）的默认行为变更](#green-bundlepublish的默认行为变更)
@@ -258,40 +258,29 @@ center 没有内置版本管理。最简单的回滚方式是：
 
 ---
 
-## 自定义端口健康检查（migration 003）
+## 自定义端口健康检查
 
 此特性让管理员维护一份「待探测 TCP 端口」清单（如 SMTP `25`、HTTPS `443`、自定义 `50001-50003`），每台 Agent 拉取该清单、对本机做 TCP 连通性探测，并把结果随心跳上报；Center 在 **Agents 视图** 用彩色徽章展示每个端口的最新状态。
 
-数据落在两张新表：`system_ports`（管理员维护的端口清单）与 `exchange_agent_port_status`（每 Agent × 每端口的最新探测结果）。二者由 **migration 003** 引入。
+数据落在两张表：`system_ports`（管理员维护的端口清单）与 `exchange_agent_port_status`（每 Agent × 每端口的最新探测结果），二者由 `db/schema/001-initial.sql` 一并创建（**不存在单独的 migration 003**）。
 
 ### 全新部署：无需额外操作
 
-首次启动向导的 schema 应用器（`center/src/init/schema-applier.js` 的 `applyAll`）在跑完 `01-tables.sql` + `02-seed-roles.sql` 后，会**按文件名顺序自动应用 `db/migrations/` 下的全部迁移**（001 → 002 → 003）。所以走 [首次启动向导](#首次启动向导) 的全新库会自动建好这两张表，**不用手动跑任何 SQL**。
+首次启动向导的 schema 应用器（`center/src/init/schema-applier.js` 的 `applyAll`）自动跑完 `db/schema/001-initial.sql`。走 [首次启动向导](#首次启动向导) 的全新库会自动建好这两张表，**不用手动跑任何 SQL**。
 
-### 存量升级：手动应用 migration 003
+### 存量升级
 
-已初始化的部署被 init 完成标记（`.env` 的 `EXDASHBOARD_INITIALIZED=1` + 注册表）硬锁在向导之外，`update-center.ps1` **只更新代码、不碰数据库**。因此升级到含本特性的版本后，必须对现有库手动应用一次 migration 003。两份迁移都是幂等的（`CREATE TABLE IF NOT EXISTS` / `IF OBJECT_ID(...) IS NULL`），重复执行安全。
+已初始化的部署被 init 完成标记（`.env` 的 `EXDASHBOARD_INITIALIZED=1` + 注册表）硬锁在向导之外，`update-center.ps1` **只更新代码、不碰数据库**。本特性表在 `db/schema/001-initial.sql` 内已包含，无需手动跑 migration。
 
-**MySQL：**
+---
 
-```powershell
-# 用库里的账户执行；<db> 为 appsettings.json 里配置的库名
-Get-Content .\db\migrations\003-port-healthcheck.sql -Raw | mysql -u <user> -p <db>
-```
+## 升级到 v2.0+（包系统 / 插件系统 — planned）
 
-**SQL Server：**
+v2.0 起计划引入包管理（plugin system）：管理员可上传/启用/升级/卸载「包」，每个包按其 `manifest.type`（`gauge` / `counter` / `timeseries` / `status`）写入对应的 `metric_*` 表，并在 **指标看板**（`/dashboard/metrics`）展示。
 
-```powershell
-sqlcmd -S <server> -d <db> -U <user> -P <pass> -i .\db\migrations\mssql\003-port-healthcheck.sql
-```
+> **planned — 尚未实现**：本节为规划占位。当前仓库没有 `migration 004-package-system.sql`，也没有 `migration 013-orphan_schemas.sql`。具体迁移编号、文件路径与 `metric_*` 表的落地位置将由后续任务决定（参考候选路径 `db/migrations/NNN-name.sql` 与 `db/migrations/mssql/NNN-name.sql`）。
 
-应用后 `Restart-Service ExDashboardCenter`（新增端点/服务需要重载代码，若升级步骤已重启则可跳过）。
-
-### 升级到 v2.0+（包系统 / 插件系统）
-
-v2.0 起引入包管理（plugin system）：管理员可上传/启用/升级/卸载「包」，每个包按其 `manifest.type`（`gauge` / `counter` / `timeseries` / `status`）写入对应的 `metric_*` 表，并在 **指标看板**（`/dashboard/metrics`）展示。
-
-数据落在六张新表（`migration 004` 引入）：
+#### 未来计划的数据表（v2.0+）
 
 | 表 | 用途 |
 |---|---|
@@ -302,36 +291,7 @@ v2.0 起引入包管理（plugin system）：管理员可上传/启用/升级/�
 | `metric_status` | 最新健康状态（OK/WARN/CRIT/...），按 `(agent_id, metric_id)` 唯一 |
 | `metric_timeseries` | append-only 时序点 |
 
-#### 全新部署：无需额外操作
-
-首次启动向导的 schema 应用器（`center/src/init/schema-applier.js` 的 `applyAll`）按文件名顺序自动应用 `db/migrations/` 下的全部迁移（001 → 002 → 003 → 004）。走 [首次启动向导](#首次启动向导) 的全新库会自动建好这六张表，**不用手动跑任何 SQL**。
-
-#### 存量升级：手动应用 migration 004
-
-`update-center.ps1` **只更新代码、不碰数据库**。升级到含包系统的版本后，必须对现有库手动应用一次 migration 004。两份迁移都是幂等的（`CREATE TABLE IF NOT EXISTS` / `IF OBJECT_ID(...) IS NULL`），重复执行安全。
-
-**MySQL：**
-
-```powershell
-# 用库里的账户执行；<db> 为 appsettings.json 里配置的库名
-Get-Content .\db\migrations\004-package-system.sql -Raw | mysql -u <user> -p <db>
-```
-
-**SQL Server：**
-
-```powershell
-sqlcmd -S <server> -d <db> -U <user> -P <pass> -i .\db\migrations\mssql\004-package-system.sql
-```
-
-应用后 `Restart-Service ExDashboardCenter`（新增端点/服务需要重载代码，若升级步骤已重启则可跳过）。
-
-#### Migration 013（orphan_schemas）
-
-Added by the self-contained monitoring package plan (2026-08-09). Pure
-`CREATE TABLE IF NOT EXISTS`; existing installations pick it up
-automatically on next `/init` wizard boot. No manual action required.
-
-#### 新增的 UI 入口
+#### 新增的 UI 入口（planned）
 
 | 路径 | 权限 | 作用 |
 |---|---|---|
@@ -340,7 +300,7 @@ automatically on next `/init` wizard boot. No manual action required.
 | `/admin/packages/:name` | `admin:packages` | 单包参数编辑 |
 | `/dashboard/metrics` | 默认登录 | 指标看板：按包查看 gauge/counter/timeseries/status |
 
-Agent 侧**零配置**：每个 Agent 在跑包脚本后，会把收集到的指标随心跳一起上报，Center 自动按 `manifest.type` 落到对应表。
+Agent 侧**零配置**（planned）：每个 Agent 在跑包脚本后，会把收集到的指标随心跳一起上报，Center 自动按 `manifest.type` 落到对应表。
 
 ### 配置要探测的端口（管理员 UI）
 
@@ -358,7 +318,7 @@ Agent 侧**零配置**：每个 Agent 在跑包脚本后，会把收集到的指
 
 Agent **无需任何额外配置**。每个心跳周期（`heartbeatIntervalSeconds`，默认 5s）Agent 会：
 
-1. 拉取 `GET /api/agent/ports` 获取当前端口清单（拉取失败时静默降级为空清单，不影响心跳）；
+1. 拉取 `GET /api/admin/ports` 获取当前端口清单（拉取失败时静默降级为空清单，不影响心跳）；
 2. 对每个端口做并行 TCP 探测（2s 超时）；
 3. 把 `ports:[{port, ok, latencyMs}]` 附在心跳里上报。
 
@@ -392,7 +352,7 @@ npm start
 
 1. `frontend/dist/index.html` 不存在 → 跑 `npm run build:frontend`
 2. 镜像 `frontend/dist/` → `center/dist/`
-3. spawn `node center/server.js`，cwd=`center/`，监听 `:8080`
+3. spawn `node center/server.js`，cwd=`center/`，监听 `:8080`（**已知问题**：`center/server.js` 当前在仓库中缺失，但已被 `center/package.json` 的 `main` / `start` 字段声明；该文件的实际创建与接线为 follow-up 任务）
 
 浏览器打开 `http://localhost:8080/init` 即可首次初始化，或 `http://localhost:8080/login` 登录。
 
@@ -470,7 +430,7 @@ ExDashboard/                     # 仓库根
 ```
 C:\exdashboard\
 ├── Center\
-│   ├── server.js              # Express 入口
+│   ├── server.js              # Express 入口（**known issue**：文件当前在仓库中缺失，package.json 的 main / start 字段已声明；follow-up 任务补齐）
 │   ├── package.json
 │   ├── appsettings.json       # 由 /init 向导写入（含 db、jwtSecret、agentToken）
 │   ├── .env                   # init 完成标记（EXDASHBOARD_INITIALIZED=1）

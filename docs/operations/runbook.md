@@ -96,29 +96,19 @@ sqlcmd -S localhost -Q "BACKUP DATABASE [Exchange_Monitoring] TO DISK='D:\Backup
 
 agent 仍会使用本地缓存的 `appsettings.json` 与本地队列缓存；center URL 恢复可达后自动恢复上报。
 
-## 数据库 Migration 与发现
+## 数据库 Schema 与发现
 
-### Migration
+### Schema 应用
 
-数据库 migration 文件位于 `db/migrations/NNN-name.sql`，由 `scripts/install-center.ps1` 安装 center 后通过首次启动的 `/init` 向导自动应用（schema + seed + migration 一并执行）。
+当前数据库 schema 全部由单文件 `db/schema/001-initial.sql` 定义（MySQL / SQL Server 共用），由 `scripts/install-center.ps1` 安装 center 后通过首次启动的 `/init` 向导自动应用。
 
-如需手动应用 migration，按部署的 dialect 选择对应的 CLI：
-
-```powershell
-# MySQL
-Get-Content db\migrations\001-exchange-discovery.sql | mysql -h <host> -P 3306 -u root -p<pwd> exchange_monitoring
-
-# SQL Server（需要 sqlcmd 在 PATH 中）
-Invoke-Sqlcmd -ServerInstance <host> -Database Exchange_Monitoring -InputFile db\migrations\mssql\001-exchange-discovery.sql
-```
-
-已应用的 migration 通过文件名前缀顺序隐式追踪（未维护 migrations 表 — 若后续要加追踪表请参考 ADR-XXX）。
+> **未来 migration 体系（planned）**：未来若引入增量迁移，预定目录为 `db/migrations/NNN-name.sql`（MySQL 顶层 + `db/migrations/mssql/` 子目录），并由首次启动的 `/init` 向导按文件名顺序自动应用。具体编号与内容 TBD，请按后续任务的实际产物更新本文档。
 
 ### Exchange Server/DAG 发现
 
 agent 每 `discovery_interval_hours`（默认 4 小时）采集本地 Exchange Server 元数据，POST 到 `/api/agent/discover`。center UPSERT 到 `servers`；`dag_id` 永远由 admin 在中心侧维护，agent 不会触碰。
 
-admin 通过 `/admin/dags-catalog` 维护DAG，通过 `/admin/servers-catalog` 维护 Exchange Server 的 DAG 归属。`/admin/site-queue-matrix` 页面展示选中DAG的 Exchange Server × mailbox database 数据库副本健康矩阵，每 `dag_matrix_refresh_seconds`（默认 10 秒）自动刷新。
+admin 通过 `/admin/dags-catalog` 维护DAG，通过 `/admin/dbs-catalog` 维护 mailbox database 目录。`/admin/dag-replication` 页面展示选中DAG的 Exchange Server × mailbox database 数据库副本健康矩阵，刷新行为见下文 [后台 retention 与 DAG 矩阵](#后台-retention-与-dag-矩阵)。
 
 ## 端口健康检查（Custom Port Healthcheck）
 
@@ -136,7 +126,7 @@ Agent 除了心跳上报队列/DAG/邮箱数据库数据外，还会对管理员
 
 - Agents 视图每行按端口显示徽章：绿 <100ms / 黄 100-500ms / 红 ≥500ms 或不可达 / 灰 `—` 无数据
 - REST：`GET /api/dashboard/agents`，每个 agent 的 `portStatuses: [{port, label, ok, latencyMs, lastCheckedAt}]`
-- 管理员从清单中删除某端口后，其历史探测行会在展示层自动隐藏（SQL `INNER JOIN system_ports`）
+- 管理员从清单中删除某端口后，其历史探测行会被 [`center/src/services/probe.js`](../../center/src/services/probe.js) 的 hourly retention purge 清掉（见 [后台 retention 与 DAG 矩阵](#后台-retention-与-dag-矩阵)）。
 
 ### 验证 agent 在上报端口数据
 
@@ -162,7 +152,27 @@ $t = (Invoke-WebRequest http://center:8080/api/auth/login `
 
 ### 移除端口
 
-在 `/admin/ports` 删除即可——agent 不再探测，旧探测行不再展示（无后台清理 job，靠展示层 SQL `INNER JOIN` 过滤）。
+在 `/admin/ports` 删除即可——agent 下次心跳即不再探测；旧探测行会被 hourly retention purge 清掉（见 [后台 retention 与 DAG 矩阵](#后台-retention-与-dag-矩阵)）。
+
+---
+
+## 后台 retention 与 DAG 矩阵
+
+### Retention purge（hourly）
+
+中心服务的 retention purge 由 [`center/src/services/probe.js`](../../center/src/services/probe.js) 的 `createProbeLoop`（默认 `intervalMs = 3600_000`，即每小时一次）驱动。每次 tick 调用 `runOnce` → `purgeOld`，按配置的 `retention` 对象（默认 `{ queueDays: 7, mdbDays: 7, serviceDays: 30 }`）清理下列表中的过期快照：
+
+- `queue_snapshots`（`queueDays`）
+- `mdb_copy_snapshots`（`mdbDays`）
+- `service_states`（`serviceDays`）
+- `client_access_snapshots`（`queueDays`）
+- `server_resources`（`queueDays`）
+
+`exchange_agent_port_status` 当前**不在** probe.js 的 purge 列表内（follow-up 任务添加 `retention.portDays` 与对应 `purgeOld` 调用）。
+
+### DAG 副本健康矩阵（不自动刷新）
+
+`/admin/dag-replication` 页面展示选中 DAG 的 Exchange Server × mailbox database 数据库副本健康矩阵。矩阵数据来自 SQL 视图 `dag_replication_matrix` —— **它是 SQL view，不是后台定时刷新任务**，刷新时机由 `center/src/services/dags.js` 的 `getDagTopology()` 在每次前端请求时按需计算。
 
 ---
 
@@ -196,26 +206,15 @@ center 服务同时支持 MySQL 5.7+ 和 SQL Server 2014+，部署时二选一�
 
 SQL Server 部署需提前手动创建空数据库。手动应用 migration 时需要 `sqlcmd` 在 PATH 中。
 
-### Schema 与 migration 目录布局
+### Schema 目录布局（当前实际状态）
 
 ```
 db/
-├── schema/
-│   ├── 01-tables.sql           # mysql（默认；legacy 别名）
-│   ├── 02-seed-roles.sql       # mysql
-│   ├── mysql/                  # mysql 规范路径
-│   │   ├── 01-tables.sql
-│   │   └── 02-seed-roles.sql
-│   └── mssql/
-│       ├── 01-tables.sql
-│       └── 02-seed-roles.sql
-└── migrations/
-    ├── 001-exchange-discovery.sql  # mysql（legacy 别名）
-    ├── mysql/
-    │   └── 001-exchange-discovery.sql
-    └── mssql/
-        └── 001-exchange-discovery.sql
+└── schema/
+    └── 001-initial.sql         # 单文件 schema（MySQL / SQL Server 共用）
 ```
+
+> **注意**：当前仓库 schema 仅为 `db/schema/001-initial.sql` 单文件。未来如需拆分 `db/schema/mysql/`、`db/schema/mssql/` 子目录，或新增 `db/migrations/NNN-*.sql` 迁移体系，具体编号与内容 TBD，请按后续任务的实际产物更新本文档。
 
 ### 集成测试
 

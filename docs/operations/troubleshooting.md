@@ -96,16 +96,16 @@ Get-Content "C:\exdashboard\Logs\ExchangeHealthAgent-stderr.log" -Tail 200
 2. 等 5s（agent 下一个心跳周期），Agents 视图应出现徽章
 3. 若清单非空但仍全灰：
    - `GET /api/dashboard/agents` 的 `portStatuses` 应非空——查 agent 是否在跑：`Get-Service ExchangeHealthAgent`
-   - agent 日志看 `fetchPortList` 是否报错（401/网络/DNS）
+   - agent 日志看端口拉取/探测相关报错（401/网络/DNS）
 
 ### Symptom: Agent 启动后没有任何端口数据
 
-**Likely cause:** agent 拉取端口清单失败（`fetchPortList` 永不抛错，所以 agent 不会因此退出）
+**Likely cause:** agent 拉取端口清单失败（agent 不会因此退出，会静默降级为空清单）
 
 **Steps:**
-1. `Get-Content "C:\exdashboard\Logs\ExchangeHealthAgent-stdout.log" -Tail 200` — 找 `fetchPortList` 相关错误
-2. 验证 center 端：`Invoke-WebRequest http://center:8080/api/agent/ports -Headers @{Authorization="Bearer <agentToken>"}`（用 `appsettings.json` 里的 agentToken）
-3. 401 → agentToken 不匹配；500 → center 端 DB 故障
+1. `Get-Content "C:\exdashboard\Logs\ExchangeHealthAgent-stdout.log" -Tail 200` — 找端口拉取/探测相关错误
+2. 验证 center 端：用 admin JWT 调 `Invoke-WebRequest http://center:8080/api/admin/ports -Headers @{Authorization="Bearer <jwt>"}` 确认清单非空（注：port 拉取在 agent 侧走 agentToken；清单维护走 admin `/api/admin/ports`）
+3. 401 → token 不匹配；500 → center 端 DB 故障
 
 ### Symptom: 错误码 1311 (DNS)
 

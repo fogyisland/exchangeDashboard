@@ -106,7 +106,7 @@ sc.exe delete ExDashboardCenter
 |---|---|---|
 | Node.js | 18+（推荐 LTS 20/22） | center + 前端都是 Node 实现 |
 | 数据库 | MySQL 5.7+ 或 SQL Server 2014+ | 部署时二选一，运行期不可切换 |
-| 操作系统 | Windows 10 / Server 2016+ | `start.bat` 用 cmd 语法（其他平台请用 `node center/server.js` 前台模式，参见 [附录](#附录本地纯前端开发模式)） |
+| 操作系统 | Windows 10 / Server 2016+ | `start.bat` 用 cmd 语法（其他平台请用 `node center/server.js` 前台模式 — **已知问题**：`center/server.js` 当前在仓库中缺失，仅由 `center/package.json` 的 `main` / `start` 字段声明，实际入口文件待 follow-up 任务补齐；参见 [附录](#附录本地纯前端开发模式)） |
 | PowerShell | 5.1+ | `scripts\install-center.ps1` 走 PS 5.1 语法 |
 
 **NSSM 已捆绑**：本目录 `nssm/nssm.exe`（约 324 KB），服务模式默认使用此副本，**无需额外下载**。
@@ -203,6 +203,6 @@ npm install
 npm start
 ```
 
-`scripts/start-prod.js` 自动：`npm run build:frontend`（缺时）→ 镜像 `frontend/dist/` → `center/dist/` → spawn `node center/server.js`，cwd=`center/`，监听 `:8080`。按 **Ctrl+C** 关闭。
+`scripts/start-prod.js` 自动：`npm run build:frontend`（缺时）→ 镜像 `frontend/dist/` → `center/dist/` → spawn `node center/server.js`，cwd=`center/`，监听 `:8080`（**已知问题**：`center/server.js` 当前在仓库中缺失，仅由 `center/package.json` 的 `main` / `start` 字段声明；该入口文件的实际创建与接线为 follow-up 任务）。按 **Ctrl+C** 关闭。
 
 此模式适合纯前端开发（Vite / Vue），**不适合**做完整的端到端测试 —— 不会触发 init 模式逻辑（需要 `appsettings.json` 缺失才会进入）。
