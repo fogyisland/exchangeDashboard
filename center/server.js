@@ -210,20 +210,18 @@ if (invokedDirectly) {
       app.use('/api/admin', adminRouter({ db, logger, config: finalConfig }));
       // ExDashboard DAG topology endpoint (replaces AD's dcsRouter).
       app.use('/api/dags', dagRouter({ db }));
-      // TODO: implemented in later task — lockoutRouter in ExDashboard is a
-      // stub (no per-route auth). Wire requireAuth/requirePerm once the
-      // lockout event table is populated by the agent collector.
-      app.use('/api/lockout', lockoutRouter());
-      // Schema-migrations admin route. The router factory expects a
-      // pre-built requireAuth middleware (the user-auth.js module exports
-      // a `userAuth` factory rather than a bare requireAuth), so we build
-      // it here using the same db/jwtSecret the authRouter uses.
-      const schemaMigrationsAuth = userAuth({
+      // Build the user-auth requireAuth middleware once and share it with
+      // every admin route that needs it (schema-migrations, lockout). The
+      // user-auth.js module exports a `userAuth` factory rather than a bare
+      // requireAuth — instantiate it here using the same db/jwtSecret the
+      // authRouter uses, then pass it to each gated router.
+      const requireAuth = userAuth({
         db,
         jwtSecret: finalConfig.jwt.secret,
         expiresInSeconds: finalConfig.jwt.expiresInSeconds
       }).requireAuth;
-      app.use('/api/schema-migrations', schemaMigrationsRouter({ db, requireAuth: schemaMigrationsAuth }));
+      app.use('/api/lockout', lockoutRouter({ requireAuth }));
+      app.use('/api/schema-migrations', schemaMigrationsRouter({ db, requireAuth }));
       app.use('/api/heartbeat-report', heartbeatReportRouter({ db, config: finalConfig }));
       // TODO: implemented in later task — wire the packageRouter/orphanRouter
       // once `center/src/packages/` exists (ExDashboard has no package

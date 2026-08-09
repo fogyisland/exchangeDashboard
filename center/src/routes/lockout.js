@@ -1,8 +1,8 @@
 import express from 'express';
 
-export function lockoutRouter() {
+export function lockoutRouter({ requireAuth }) {
   const r = express.Router();
-  r.post('/diagnose', express.json(), (req, res) => {
+  r.post('/diagnose', requireAuth, express.json(), (req, res) => {
     const { username, sourceIp } = req.body || {};
     res.json({
       ok: true,
