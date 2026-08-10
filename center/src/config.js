@@ -1,6 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { decryptString, loadOrCreateKey } from './config-crypto.js';
+
+const SECRET_FIELDS = [
+  ['db', 'password'],
+  ['jwt', 'secret']
+];
 
 export function defaultConfig() {
   return {
@@ -42,13 +48,29 @@ export function installPathFromConfigPath(configPath) {
   return path.resolve(path.dirname(configPath));
 }
 
-export function loadConfigOrNull(configPath) {
+export async function loadConfigOrNull(configPath) {
   if (!fs.existsSync(configPath)) return null;
   const raw = fs.readFileSync(configPath, 'utf8');
   const parsed = JSON.parse(raw);
+
+  const envPath = path.join(installPathFromConfigPath(configPath), '.env');
+  const { key, created } = loadOrCreateKey(envPath);
+  if (created) {
+    throw new Error('MISSING_SECRET_KEY — EXDASHBOARD_SECRET_KEY not present in .env; run the installer or wizard to initialize secrets');
+  }
+
   const cfg = { ...defaultConfig(), ...parsed };
   if (parsed.db) cfg.db = { ...defaultConfig().db, ...parsed.db };
   if (parsed.jwt) cfg.jwt = { ...defaultConfig().jwt, ...parsed.jwt };
   if (parsed.agent) cfg.agent = { ...defaultConfig().agent, ...parsed.agent };
-  return { config: cfg, installPath: installPathFromConfigPath(configPath) };
+
+  let needsMigration = false;
+  for (const [obj, field] of SECRET_FIELDS) {
+    const value = cfg[obj]?.[field];
+    const decrypted = decryptString(value, key);
+    cfg[obj][field] = decrypted;
+    if (!value || !value.startsWith?.('enc:v1:')) needsMigration = true;
+  }
+
+  return { config: cfg, installPath: installPathFromConfigPath(configPath), needsMigration };
 }

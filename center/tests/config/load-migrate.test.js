@@ -1,0 +1,84 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs/promises';
+import { loadConfigOrNull } from '../../src/config.js';
+import { encryptString } from '../../src/config-crypto.js';
+
+const KEY = 'c'.repeat(64);
+
+async function freshDir() {
+  return await fs.mkdtemp(path.join(os.tmpdir(), 'lm-'));
+}
+
+async function writeConfig(dir, cfg) {
+  const configPath = path.join(dir, 'appsettings.json');
+  await fs.writeFile(configPath, JSON.stringify(cfg, null, 2));
+  return configPath;
+}
+
+async function writeEnv(dir, body) {
+  const envPath = path.join(dir, '.env');
+  await fs.writeFile(envPath, body);
+  return envPath;
+}
+
+test('loadConfigOrNull throws MISSING_SECRET_KEY when .env has no key', async () => {
+  const dir = await freshDir();
+  const cfgPath = await writeConfig(dir, {
+    listenPort: 8080,
+    db: { host: 'h', user: 'u', password: 'plain-pw', database: 'd' },
+    jwt: { secret: 'plain-jwt' }
+  });
+  await assert.rejects(
+    () => loadConfigOrNull(cfgPath),
+    /MISSING_SECRET_KEY/
+  );
+});
+
+test('loadConfigOrNull returns decrypted config + needsMigration=true for plaintext install', async () => {
+  const dir = await freshDir();
+  await writeEnv(dir, `EXDASHBOARD_SECRET_KEY=${KEY}\n`);
+  const cfgPath = await writeConfig(dir, {
+    db: { host: 'h', user: 'u', password: 'plain-pw', database: 'd' },
+    jwt: { secret: 'plain-jwt' }
+  });
+  const r = await loadConfigOrNull(cfgPath);
+  assert.equal(r.config.db.password, 'plain-pw');
+  assert.equal(r.config.jwt.secret, 'plain-jwt');
+  assert.equal(r.needsMigration, true);
+});
+
+test('loadConfigOrNull returns decrypted config + needsMigration=false for already-encrypted install', async () => {
+  const dir = await freshDir();
+  await writeEnv(dir, `EXDASHBOARD_SECRET_KEY=${KEY}\n`);
+  const cfgPath = await writeConfig(dir, {
+    db: { host: 'h', user: 'u', password: encryptString('real-pw', KEY), database: 'd' },
+    jwt: { secret: encryptString('real-jwt', KEY) }
+  });
+  const r = await loadConfigOrNull(cfgPath);
+  assert.equal(r.config.db.password, 'real-pw');
+  assert.equal(r.config.jwt.secret, 'real-jwt');
+  assert.equal(r.needsMigration, false);
+});
+
+test('loadConfigOrNull returns null when appsettings.json is missing', async () => {
+  const dir = await freshDir();
+  const r = await loadConfigOrNull(path.join(dir, 'no-such-file.json'));
+  assert.equal(r, null);
+});
+
+test('loadConfigOrNull throws on tampered encrypted value', async () => {
+  const dir = await freshDir();
+  await writeEnv(dir, `EXDASHBOARD_SECRET_KEY=${KEY}\n`);
+  const valid = encryptString('x', KEY);
+  const parts = valid.split(':');
+  parts[3] = parts[3].slice(0, -1) + (parts[3].slice(-1) === '0' ? '1' : '0');
+  const tampered = parts.join(':');
+  const cfgPath = await writeConfig(dir, {
+    db: { host: 'h', user: 'u', password: tampered, database: 'd' },
+    jwt: { secret: 'plain' }
+  });
+  await assert.rejects(() => loadConfigOrNull(cfgPath), /SECRET_KEY_MISMATCH/);
+});
