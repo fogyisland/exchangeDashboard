@@ -25,16 +25,29 @@ async function writeEnv(dir, body) {
   return envPath;
 }
 
-test('loadConfigOrNull throws MISSING_SECRET_KEY when .env has no key', async () => {
+test('loadConfigOrNull returns needsMigration=true for plaintext install with no .env key', async () => {
   const dir = await freshDir();
   const cfgPath = await writeConfigFile(dir, {
     listenPort: 8080,
     db: { host: 'h', user: 'u', password: 'plain-pw', database: 'd' },
     jwt: { secret: 'plain-jwt' }
   });
+  const r = await loadConfigOrNull(cfgPath);
+  assert.equal(r.config.db.password, 'plain-pw');
+  assert.equal(r.config.jwt.secret, 'plain-jwt');
+  assert.equal(r.needsMigration, true);
+});
+
+test('loadConfigOrNull throws SECRET_KEY_MISMATCH when secrets are encrypted but .env has no key', async () => {
+  const dir = await freshDir();
+  const cfgPath = await writeConfigFile(dir, {
+    listenPort: 8080,
+    db: { host: 'h', user: 'u', password: encryptString('real-pw', KEY), database: 'd' },
+    jwt: { secret: encryptString('real-jwt', KEY) }
+  });
   await assert.rejects(
     () => loadConfigOrNull(cfgPath),
-    /MISSING_SECRET_KEY/
+    /SECRET_KEY_MISMATCH/
   );
 });
 
@@ -82,6 +95,20 @@ test('loadConfigOrNull throws on tampered encrypted value', async () => {
     jwt: { secret: 'plain' }
   });
   await assert.rejects(() => loadConfigOrNull(cfgPath), /SECRET_KEY_MISMATCH/);
+});
+
+test('loadConfigOrNull throws SECRET_KEY_MISMATCH when encrypted secrets are encrypted with a different key than .env holds', async () => {
+  const dir = await freshDir();
+  await writeEnv(dir, `EXDASHBOARD_SECRET_KEY=${KEY}\n`);
+  const cfgPath = await writeConfigFile(dir, {
+    listenPort: 8080,
+    db: { host: 'h', user: 'u', password: encryptString('real-pw', 'd'.repeat(64)), database: 'd' },
+    jwt: { secret: encryptString('real-jwt', 'd'.repeat(64)) }
+  });
+  await assert.rejects(
+    () => loadConfigOrNull(cfgPath),
+    /SECRET_KEY_MISMATCH/
+  );
 });
 
 test('migration: plaintext appsettings.json → call migrate → encrypted on disk → re-load decrypts', async () => {

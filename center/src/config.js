@@ -54,10 +54,7 @@ export async function loadConfigOrNull(configPath) {
   const parsed = JSON.parse(raw);
 
   const envPath = path.join(installPathFromConfigPath(configPath), '.env');
-  const { key, created } = loadOrCreateKey(envPath);
-  if (created) {
-    throw new Error('MISSING_SECRET_KEY — EXDASHBOARD_SECRET_KEY not present in .env; run the installer or wizard to initialize secrets');
-  }
+  const { key } = loadOrCreateKey(envPath);
 
   const cfg = { ...defaultConfig(), ...parsed };
   if (parsed.db) cfg.db = { ...defaultConfig().db, ...parsed.db };
