@@ -30,6 +30,9 @@ test('loadConfigOrNull parses a real file', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'excfg-'));
   const file = path.join(dir, 'appsettings.json');
   await fs.writeFile(file, JSON.stringify({ listenPort: 7777, dbKind: 'mssql' }));
+  // loadConfigOrNull now requires a sibling .env with EXDASHBOARD_SECRET_KEY.
+  // See tasks 1-3 of the config-secret-encryption SDD.
+  await fs.writeFile(path.join(dir, '.env'), `EXDASHBOARD_SECRET_KEY=${'c'.repeat(64)}\n`);
   const r = await loadConfigOrNull(file);
   assert.ok(r);
   assert.equal(r.config.listenPort, 7777);

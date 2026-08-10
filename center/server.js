@@ -16,11 +16,14 @@
 
 import express from 'express';
 import fs from 'node:fs';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import pino from 'pino';
 
 import { createApp } from './src/app.js';
 import { defaultConfig, sha256Hex, installPathFromConfigPath } from './src/config.js';
+import { encryptString, loadOrCreateKey } from './src/config-crypto.js';
+import { writeConfig } from './src/init/config-writer.js';
 import { healthzRouter } from './src/routes/healthz.js';
 import { init, close } from './src/db/index.js';
 import { startServers, closeAll } from './src/multi-port.js';
@@ -88,6 +91,35 @@ export function buildServerApps({ config, db, logger, needsInit, systemConfig = 
 
 // ---------- runtime bootstrap (only fires when invoked as `node server.js`) ----------
 
+// Auto-migrate plaintext installs (Task 3 of the config-secret-encryption
+// SDD). When loadConfigOrNull reports needsMigration, rewrite the
+// appsettings.json file in place with db.password + jwt.secret encrypted
+// under the EXDASHBOARD_SECRET_KEY from the sibling .env. One-shot,
+// atomic rename, idempotent (next boot sees needsMigration=false and
+// skips the rewrite).
+function migratePlaintextSecrets({ configPath, logger }) {
+  const envPath = path.join(path.dirname(configPath), '.env');
+  const { key } = loadOrCreateKey(envPath);
+  const before = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  const next = { ...before };
+  const secretPaths = [['db', 'password'], ['jwt', 'secret']];
+
+  let changed = false;
+  for (const [obj, field] of secretPaths) {
+    if (!next[obj]) continue;
+    const v = next[obj][field];
+    if (typeof v === 'string' && !v.startsWith('enc:v1:')) {
+      next[obj] = { ...next[obj], [field]: encryptString(v, key) };
+      changed = true;
+    }
+  }
+  if (changed) {
+    writeConfig(configPath, next);
+    if (logger) logger.info({ configPath }, 'config secrets migrated to encrypted form');
+  }
+  return changed;
+}
+
 const configPath = process.argv[2] || process.env.APPSETTINGS_PATH || './appsettings.json';
 const installPath = installPathFromConfigPath(configPath);
 
@@ -128,12 +160,26 @@ if (invokedDirectly) {
     const markerLocked = hasMarker({ configPath });
 
     let config = null;
+    let loaded = null;
     if (defaultConfig && fs.existsSync(configPath)) {
       try {
-        const loaded = await import('./src/config.js').then(m => m.loadConfigOrNull ? m.loadConfigOrNull(configPath) : null);
+        loaded = await import('./src/config.js').then(m => m.loadConfigOrNull ? m.loadConfigOrNull(configPath) : null);
         if (loaded && loaded.config) config = loaded.config;
       } catch (e) {
         logger.warn({ err: e.message }, 'config load failed');
+      }
+    }
+    // Auto-migrate plaintext installs: when loadConfigOrNull reports
+    // needsMigration, rewrite appsettings.json with the two secret fields
+    // encrypted before any db/network init. Failure is fatal — better to
+    // crash than to keep booting with secrets we know are still plaintext
+    // on disk.
+    if (config && loaded && loaded.needsMigration) {
+      try {
+        migratePlaintextSecrets({ configPath, logger });
+      } catch (e) {
+        logger.error({ err: e.message }, 'config migration failed');
+        process.exit(2);
       }
     }
     // loadConfigOrNull isn't in scope at the top (we only imported
