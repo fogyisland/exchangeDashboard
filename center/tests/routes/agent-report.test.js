@@ -14,22 +14,24 @@ function setup() {
   return { app, writes };
 }
 
-test('POST /api/agent/report ingests queues, dag copies, services, clientAccess, resources', async () => {
+test('POST /api/agent/report resolves serverId and calls ingest.routeExtensions (no legacy INSERTs)', async () => {
   const { app, writes } = setup();
   const r = await supertest(app).post('/api/agent/report').send({
     agentId: 'a1', hostname: 'ex01', capturedAt: '2026-08-09T00:00:00Z',
-    queues: [{ queue_kind: 'Poison', queue_name: 'Poison', message_count: 3 }],
-    dag: { copies: [{ db_id: 'db-1', copy_queue_length: 10, mount_status: 1 }] },
-    services: [{ service_name: 'MSExchangeTransport', state: 'Running', start_mode: 'Auto' }],
-    clientAccess: [{ metric: 'RpcClientAccess.AverageLatency', value: 12 }],
-    resources: { cpu_pct: 50, memory_available_mb: 4096 }
+    extensions: []
   });
   assert.equal(r.status, 202);
-  // Expect at least: server lookup, queue insert, dag insert, services insert, clientAccess insert, resources insert
+  // Should NOT touch the legacy 5 snapshot tables
   const tables = writes.map((w) => w.sql).join('\n');
-  assert.match(tables, /INSERT INTO queue_snapshots/);
-  assert.match(tables, /INSERT INTO mdb_copy_snapshots/);
-  assert.match(tables, /INSERT INTO service_states/);
-  assert.match(tables, /INSERT INTO client_access_snapshots/);
-  assert.match(tables, /INSERT INTO server_resources/);
+  assert.doesNotMatch(tables, /INSERT INTO queue_snapshots/);
+  assert.doesNotMatch(tables, /INSERT INTO mdb_copy_snapshots/);
+  assert.doesNotMatch(tables, /INSERT INTO service_states/);
+  assert.doesNotMatch(tables, /INSERT INTO client_access_snapshots/);
+  assert.doesNotMatch(tables, /INSERT INTO server_resources/);
+  // Should still touch servers and last_report_at
+  assert.match(tables, /SELECT id FROM servers/);
+  assert.match(tables, /UPDATE agents SET last_report_at/);
+  // Returns ingest result
+  assert.equal(r.body.ok, true);
+  assert.ok(Array.isArray(r.body.ingest));
 });
