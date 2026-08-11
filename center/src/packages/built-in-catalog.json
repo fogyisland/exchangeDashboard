@@ -1,5 +1,14 @@
 {
   "version": "1.0.0",
   "updatedAt": "2026-08-11",
-  "packages": []
+  "packages": [
+    { "name": "pkg-mailflow", "version": "1.0.0", "title": "Mailflow Transport Queues", "summary": "Per-queue length + throughput from MSExchangeTransport perfmon", "roleFlags": 3, "zipPath": "built-in/pkg-mailflow-1.0.0.zip" },
+    { "name": "pkg-dag", "version": "1.0.0", "title": "DAG Mailbox Database Copies", "summary": "MDB copy queue length + replay lag from perfmon", "roleFlags": 1, "zipPath": "built-in/pkg-dag-1.0.0.zip" },
+    { "name": "pkg-services", "version": "1.0.0", "title": "MSExchange Windows Services", "summary": "Service state for MSExchange* services via wmic", "roleFlags": 7, "zipPath": "built-in/pkg-services-1.0.0.zip" },
+    { "name": "pkg-clientaccess", "version": "1.0.0", "title": "RPC Client Access", "summary": "RPC latency, ops/sec, active users from RpcClientAccess perfmon", "roleFlags": 4, "zipPath": "built-in/pkg-clientaccess-1.0.0.zip" },
+    { "name": "pkg-perfmon", "version": "1.0.0", "title": "Host Resources", "summary": "CPU, memory, disk C: free %, net throughput", "roleFlags": 7, "zipPath": "built-in/pkg-perfmon-1.0.0.zip" },
+    { "name": "pkg-mailbox-size", "version": "1.0.0", "title": "Mailbox Quota Usage", "summary": "Per-mailbox totalItemSize + itemCount via Get-MailboxStatistics", "roleFlags": 1, "zipPath": "built-in/pkg-mailbox-size-1.0.0.zip" },
+    { "name": "pkg-message-tracking", "version": "1.0.0", "title": "Message Tracking Log Counts", "summary": "Counts by event_id from TransportRoles/Logs/MessageTracking", "roleFlags": 2, "zipPath": "built-in/pkg-message-tracking-1.0.0.zip" },
+    { "name": "pkg-hub-backpressure", "version": "1.0.0", "title": "HUB Transport Backpressure", "summary": "HUB queue depth + age of oldest via perfmon + Get-Queue", "roleFlags": 2, "zipPath": "built-in/pkg-hub-backpressure-1.0.0.zip" }
+  ]
 }

@@ -1,0 +1,17 @@
+{
+  "name": "pkg-message-tracking",
+  "version": "1.0.0",
+  "description": "Counts of Exchange message tracking events by event_id, tailed from TransportRoles/Logs/MessageTracking",
+  "author": "ExDashboard",
+  "type": "counter",
+  "database": {
+    "metricTable": "tracking_event_counts",
+    "metricColumns": {
+      "agent_id": { "type": "varchar(64)" },
+      "ts": { "type": "datetime" },
+      "event_id": { "type": "varchar(8)" },
+      "message_count": { "type": "int" }
+    }
+  },
+  "agent": { "intervalSec": 60, "timeoutMs": 15000 }
+}

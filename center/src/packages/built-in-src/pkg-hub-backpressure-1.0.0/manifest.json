@@ -1,0 +1,20 @@
+{
+  "name": "pkg-hub-backpressure",
+  "version": "1.0.0",
+  "description": "HUB transport queue pressure + age of oldest message via perfmon and Get-Queue",
+  "author": "ExDashboard",
+  "type": "gauge",
+  "database": {
+    "metricTable": "hub_queue_pressure",
+    "metricColumns": {
+      "agent_id": { "type": "varchar(64)" },
+      "ts": { "type": "datetime" },
+      "queue_kind": { "type": "varchar(64)" },
+      "current_depth": { "type": "int" },
+      "max_depth": { "type": "int", "nullable": true },
+      "pct_full": { "type": "double", "nullable": true },
+      "age_oldest_min": { "type": "int", "nullable": true }
+    }
+  },
+  "agent": { "intervalSec": 60, "timeoutMs": 30000 }
+}

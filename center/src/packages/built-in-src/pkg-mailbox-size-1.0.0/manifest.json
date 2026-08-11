@@ -1,0 +1,19 @@
+{
+  "name": "pkg-mailbox-size",
+  "version": "1.0.0",
+  "description": "Per-mailbox total item size + item count from local Exchange Management Shell (Get-MailboxStatistics)",
+  "author": "ExDashboard",
+  "type": "gauge",
+  "database": {
+    "metricTable": "mailbox_quota",
+    "metricColumns": {
+      "agent_id": { "type": "varchar(64)" },
+      "ts": { "type": "datetime" },
+      "mailbox_identity": { "type": "varchar(255)" },
+      "database": { "type": "varchar(128)" },
+      "total_item_size_bytes": { "type": "bigint" },
+      "item_count": { "type": "int" }
+    }
+  },
+  "agent": { "intervalSec": 600, "timeoutMs": 300000 }
+}
