@@ -128,11 +128,6 @@ test0('end-to-end: install → heartbeat returns pendingInstalls → report flip
   assert.equal(hbRes.body.pendingInstalls.length, 1);
   assert.equal(hbRes.body.pendingInstalls[0].name, 'pkg-int');
   // 3) Report with extensions flips status to installed
-  // Pass a Date object (not an ISO string). The agent's reporter.js does send
-  // .toISOString() over the wire, but the center's ingest currently writes the
-  // value directly to a MySQL DATETIME column, which rejects the 'T...Z' form.
-  // mysql2 auto-formats Date objects for DATETIME. The agent→center date
-  // coercion is a separate pre-existing bug (out of scope here).
   const capturedAt = new Date();
   const ingestResult = await ingest.routeExtensions({
     db: f.db, agentId: 'agent-int-1', capturedAt,
@@ -145,6 +140,55 @@ test0('end-to-end: install → heartbeat returns pendingInstalls → report flip
   // 4) Second heartbeat returns no pending
   const hb2 = await request(app).post('/api/agent/heartbeat').send({ agentId: 'agent-int-1', hostname: 'h-int', installedPackages: ['pkg-int'] });
   assert.equal(hb2.body.pendingInstalls.length, 0);
+});
+
+test0('ingest.routeExtensions accepts ISO-string capturedAt (matches agent reporter.js)', async (t) => {
+  // Regression guard for the fix in center/src/packages/ingest.js. The agent
+  // sends `capturedAt: new Date().toISOString()` over the wire (see
+  // agent/src/reporter.js:9). mysql2 rejects ISO strings ("Incorrect datetime
+  // value: '2026-08-11T...'") for DATETIME columns, so the ingest path must
+  // coerce to a Date before writing. This test exercises that exact shape
+  // (string, not Date) and asserts the metric row lands in MySQL.
+  const f = await mkIntegration(t);
+  // Install the package first so its schema/manifest exist for ingest to look up.
+  const app = express();
+  app.use(express.json());
+  app.locals.db = f.db;
+  app.use('/api/admin/catalog', catalogRouter({
+    config: {}, db: f.db, dbKind: 'mysql', cacheRoot: f.cacheRoot, logger: { warn() {}, info() {}, error() {} },
+    builtInDir: f.builtInDir, catalogJsonPath: f.catalogPath
+  }));
+  const installRes = await request(app).post('/api/admin/catalog/pkg-int/install').send({ serverIds: [f.serverId] });
+  assert.equal(installRes.status, 200);
+
+  // Exactly what the agent sends.
+  const capturedAtIso = new Date().toISOString();
+  const ingestResult = await ingest.routeExtensions({
+    db: f.db, agentId: 'agent-int-1', capturedAt: capturedAtIso,
+    extensions: [{ packageName: 'pkg-int', metricTable: 'pkgint_metric', rows: [{ value: 7 }] }],
+    serverId: f.serverId
+  });
+  assert.equal(ingestResult[0].recorded, true, `ingest should record; got ${JSON.stringify(ingestResult)}`);
+  assert.equal(ingestResult[0].error, undefined);
+
+  // Row must be readable from MySQL — proves the ISO string was actually
+  // written into the DATETIME column (not silently dropped / stringified).
+  const conn = await mysql.createConnection({
+    host: HOST, port: Number(process.env.MYSQL_TEST_PORT || 3306),
+    user: process.env.MYSQL_TEST_USER || 'root', password: process.env.MYSQL_TEST_PASSWORD || '',
+    database: f.dbName
+  });
+  try {
+    const [rows] = await conn.query('SELECT agent_id, ts, value FROM `pkg_pkg_int`.`pkgint_metric`');
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].agent_id, 'agent-int-1');
+    assert.equal(rows[0].value, 7);
+    assert.ok(rows[0].ts instanceof Date, 'ts column should round-trip as a Date');
+    // ms-level comparison; the ISO string was written within the last few seconds.
+    assert.ok(Math.abs(rows[0].ts.getTime() - new Date(capturedAtIso).getTime()) < 5000);
+  } finally {
+    await conn.end();
+  }
 });
 
 test0('reinstall of same package same version is rejected by installer but assigns are still idempotent', async (t) => {

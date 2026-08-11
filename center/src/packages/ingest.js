@@ -7,6 +7,12 @@ function schemaName(name) {
 
 export const ingest = {
   async routeExtensions({ db, agentId, capturedAt, extensions = [], serverId = null }) {
+    // Normalize capturedAt at the ingestion boundary. The agent sends an ISO
+    // string via Date.toISOString(); collectors may pass a Date object. mysql2
+    // auto-formats Date objects for DATETIME columns but rejects ISO strings
+    // ("Incorrect datetime value: '2026-08-11T...'"). Coercing here keeps the
+    // public API contract unchanged.
+    const ts = capturedAt instanceof Date ? capturedAt : new Date(capturedAt);
     const out = [];
     for (const ext of extensions) {
       const pkg = await installedPackages.get(db, ext.packageName);
@@ -34,10 +40,10 @@ export const ingest = {
           const values = userCols.map((c) => (row[c] === undefined ? null : row[c]));
           await db.query(
             `INSERT INTO \`${schema}\`.\`${table}\` (agent_id, ts, ${userCols.map((c) => `\`${c}\``).join(', ')}) VALUES (?, ?, ${userCols.map(() => '?').join(', ')})`,
-            [agentId, capturedAt, ...values]
+            [agentId, ts, ...values]
           );
         }
-        await packageRuns.record(db, { packageName: ext.packageName, ts: capturedAt, status: 'recorded', output: { rowCount: (ext.rows || []).length } });
+        await packageRuns.record(db, { packageName: ext.packageName, ts, status: 'recorded', output: { rowCount: (ext.rows || []).length } });
         if (serverId) {
           await serverPackageInstalls.markInstalled(db, serverId, ext.packageName);
         }
