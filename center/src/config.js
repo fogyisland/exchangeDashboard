@@ -23,7 +23,8 @@ export function defaultConfig() {
       queueRetentionDays: 7,
       mdbCopyRetentionDays: 7,
       serviceStateRetentionDays: 30
-    }
+    },
+    packageCatalogUrl: null
   };
 }
 
