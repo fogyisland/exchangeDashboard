@@ -17,7 +17,7 @@
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import pino from 'pino';
 
 import { createApp } from './src/app.js';
@@ -39,6 +39,8 @@ import { lockoutRouter } from './src/routes/lockout.js';
 import { schemaMigrationsRouter } from './src/routes/schema-migrations.js';
 import { heartbeatReportRouter } from './src/routes/heartbeat-report.js';
 import { packagesRouter } from './src/packages/router.js';
+import { catalogRouter } from './src/packages/catalog/router.js';
+import { loadCatalog } from './src/packages/catalog/loader.js';
 
 import { initRouter } from './src/init/router.js';
 import { hasMarker } from './src/init/marker.js';
@@ -275,6 +277,27 @@ if (invokedDirectly) {
         requireAuth,
         config: finalConfig
       }));
+
+      // Built-in package catalog: browse, assign to servers, and serve the
+      // ZIPs agents pull. builtInDir/catalogJsonPath are resolved relative to
+      // this file so they work regardless of the process CWD.
+      const centerDir = path.dirname(fileURLToPath(import.meta.url));
+      const builtInDir = path.join(centerDir, 'src/packages/built-in');
+      const catalogJsonPath = path.join(centerDir, 'src/packages/built-in-catalog.json');
+      app.use('/api/admin/catalog', catalogRouter({
+        config: finalConfig,
+        db,
+        dbKind: finalConfig.dbKind || 'mysql',
+        cacheRoot: finalConfig.packages?.cacheDir || './data/packages',
+        builtInDir,
+        catalogJsonPath,
+        logger
+      }));
+      // Load the catalog once at startup so a broken catalog.json surfaces in
+      // the log immediately rather than on the first admin request.
+      loadCatalog({ config: finalConfig, builtInDir, catalogJsonPath, logger })
+        .then((c) => logger.info({ source: c.source, count: c.packages.length }, 'built-in catalog loaded'))
+        .catch((e) => logger.warn({ err: e.message }, 'catalog load failed at startup'));
 
       const handles = startServers({
         webApp: apps.webApp,
