@@ -28,7 +28,8 @@ Shipped 2026-08-11. Plan + commits at `docs/superpowers/plans/2026-08-11-built-i
 - The 8 built-in packages run on Windows only (perfmon, PowerShell, registry access). On Linux/macOS the collectors return `[]` and the package still ingests (empty `extensions`).
 - `packageCatalogUrl` is in `appsettings.json` as a plain string (not a secret, not encrypted). If the URL ever needs to be a secret, route it through `.env` and `config-crypto` like `db.password`.
 - **Frontend Catalog tab will not render visually until `element-plus` is installed.** The new Catalog tab in `frontend/src/views/PackagesView.vue` uses `<el-table>`, `<el-tabs>`, `<el-dialog>`, `<el-tag>`, `<el-button>`, `<el-checkbox>`, and the `v-loading` directive — all of which are Element Plus components. `element-plus` is NOT in `frontend/package.json` and is NOT registered in `frontend/src/main.js`, so Vue renders these as inert unknown custom elements. Task 11's "no new npm deps" global constraint blocked adding the dep; the Installed tab (plain `<table>`) is unaffected. Follow-up: add `element-plus` to `frontend/package.json` and `app.use(ElementPlus)` in `main.js`, or rewrite the Catalog tab in plain HTML.
-- **Agent's ISO `capturedAt` string is not coerced to MySQL DATETIME.** `agent/src/reporter.js` sends `new Date().toISOString()` for the `capturedAt` field, but `ingest.routeExtensions` writes that string straight into the package `metricTable.ts DATETIME` column, which rejects the `T...Z` form. The integration test works around this by passing a `Date` object directly. Production writes via `/api/agent/report` will fail with "Incorrect datetime value" until the route normalizes the input (e.g. `new Date(req.body.capturedAt)`).
+- **Agent's ISO `capturedAt` string is now coerced to a `Date` in the ingest path (fixed).** `agent/src/reporter.js` sends `new Date().toISOString()` for the `capturedAt` field; `ingest.routeExtensions` normalizes it to a `Date` (and falls back to `new Date()` if the input is missing/invalid) at `center/src/packages/ingest.js:15`, so mysql2 accepts it for the `metricTable.ts DATETIME` column. Regression guarded by `center/tests/catalog/install-flow.test.js:145` (the ISO-string capturedAt integration test).
+- **Installer's `parseCreateTable` does not handle inline `PRIMARY KEY (...)` clauses inside a `CREATE TABLE` migration.** The column parser at `center/src/packages/installer.js:20-34` splits on commas (outside parens) and treats each piece as a `name type ...` token; an inline `PRIMARY KEY (col1, col2)` line therefore fails the `parts.length < 2` check and silently drops constraint info, and a trailing `PRIMARY KEY (...)` inside the same CREATE TABLE body can confuse the schema/manifest column diff. All 8 built-in packages avoid the pattern by defining `metricTable` columns only (no inline PKs — `agent_id`+`ts` are not declared PKs); any new package migration must also avoid it. Use separate `ALTER TABLE ... ADD PRIMARY KEY (...)` statements if a primary key is genuinely needed.
 
 ## E2E smoke test (manual)
 
@@ -44,11 +45,22 @@ Shipped 2026-08-11. Plan + commits at `docs/superpowers/plans/2026-08-11-built-i
 
 ## Tests that require a real MySQL
 
-Set `MYSQL_TEST_HOST`, `MYSQL_TEST_PORT`, `MYSQL_TEST_USER`, `MYSQL_TEST_PASSWORD` per `memory/reference_local_mysql.md`. Without these, MySQL-gated tests self-skip via `test.skip` (no failure).
+There are two env-var families gating MySQL-backed tests. To run the full integration suite locally, set both. Without them, MySQL-gated tests self-skip via `test.skip` (no failure).
 
-Affected tests:
+### (a) `MYSQL_TEST_*` family
+Set `MYSQL_TEST_HOST`, `MYSQL_TEST_PORT`, `MYSQL_TEST_USER`, `MYSQL_TEST_PASSWORD` per `memory/reference_local_mysql.md`. Affects:
 - `center/tests/packages/server-installs.test.js`
-- `center/tests/packages/ingest.test.js`
-- `center/tests/packages/sql.test.js`
 - `center/tests/catalog/router.test.js`
 - `center/tests/catalog/install-flow.test.js`
+
+### (b) `TEST_MYSQL_URL` family
+Set `TEST_MYSQL_HOST`, `TEST_MYSQL_PORT`, `TEST_MYSQL_USER`, `TEST_MYSQL_PASSWORD`, `TEST_MYSQL_DB` (see `center/tests/packages/ingest.test.js:7` and `center/tests/packages/sql.test.js:5`). Affects:
+- `center/tests/packages/ingest.test.js`
+- `center/tests/packages/sql.test.js`
+
+To enable both groups in one command, export both sets:
+
+```bash
+export MYSQL_TEST_HOST=127.0.0.1 MYSQL_TEST_PORT=3306 MYSQL_TEST_USER=root MYSQL_TEST_PASSWORD='Admin909217'
+export TEST_MYSQL_HOST=127.0.0.1 TEST_MYSQL_PORT=3306 TEST_MYSQL_USER=root TEST_MYSQL_PASSWORD='Admin909217' TEST_MYSQL_DB=exdashboard_test
+```

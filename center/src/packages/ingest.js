@@ -12,7 +12,8 @@ export const ingest = {
     // auto-formats Date objects for DATETIME columns but rejects ISO strings
     // ("Incorrect datetime value: '2026-08-11T...'"). Coercing here keeps the
     // public API contract unchanged.
-    const ts = capturedAt instanceof Date ? capturedAt : new Date(capturedAt);
+    const _raw = capturedAt instanceof Date ? capturedAt : new Date(capturedAt);
+    const ts = Number.isNaN(_raw.getTime()) ? new Date() : _raw;
     const out = [];
     for (const ext of extensions) {
       const pkg = await installedPackages.get(db, ext.packageName);
