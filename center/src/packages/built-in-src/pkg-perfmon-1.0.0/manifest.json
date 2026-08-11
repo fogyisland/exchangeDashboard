@@ -15,6 +15,5 @@
       "net_bytes_per_sec": { "type": "double", "nullable": true }
     }
   },
-  "agent": { "intervalSec": 60, "timeoutMs": 10000 },
-  "roleFlags": 7
+  "agent": { "intervalSec": 60, "timeoutMs": 10000 }
 }

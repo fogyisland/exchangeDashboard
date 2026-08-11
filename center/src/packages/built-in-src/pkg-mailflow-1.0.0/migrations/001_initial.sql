@@ -5,7 +5,5 @@ CREATE TABLE mailflow_queue (
   queue_name VARCHAR(64) NOT NULL,
   message_count INT NOT NULL,
   messages_per_sec DOUBLE NULL,
-  deferred_per_sec DOUBLE NULL,
-  PRIMARY KEY (agent_id, ts, queue_kind),
-  KEY idx_ts (ts)
+  deferred_per_sec DOUBLE NULL
 );

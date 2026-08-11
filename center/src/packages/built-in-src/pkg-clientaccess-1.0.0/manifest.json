@@ -13,6 +13,5 @@
       "value": { "type": "double" }
     }
   },
-  "agent": { "intervalSec": 60, "timeoutMs": 15000 },
-  "roleFlags": 4
+  "agent": { "intervalSec": 60, "timeoutMs": 15000 }
 }

@@ -1,11 +1,12 @@
 // Ported from agent/src/services-collector.js
+import { execFile as ef } from 'node:child_process';
+import { promisify } from 'node:util';
+const pexec = promisify(ef);
+
 export default {
   name: 'pkg-services',
-  async collect({ execFile }) {
-    if (!execFile || process.platform !== 'win32') return [];
-    const { execFile: ef } = await import('node:child_process');
-    const { promisify } = await import('node:util');
-    const pexec = promisify(ef);
+  async collect() {
+    if (process.platform !== 'win32') return [];
     let stdout;
     try {
       const r = await pexec('wmic', ['service', 'where', "Name like 'MSExchange%'", 'get', 'Name,State,StartMode', '/format:csv'], { timeout: 8000 });

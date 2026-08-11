@@ -5,17 +5,18 @@ const COUNTERS = [
   ['Retry', '\\MSExchangeTransport Queues(_total)\\Retry Queue Length'],
   ['Submission', '\\MSExchangeTransport Submission Queue(_total)\\Submission Queue Length']
 ];
+const MPS_PATH = '\\MSExchangeTransport Queues(_total)\\Messages Queued Per Second';
+const DPS_PATH = '\\MSExchangeTransport Queues(_total)\\Deferred Messages Per Second';
 
 export default {
   name: 'pkg-mailflow',
   async collect({ perfmon }) {
     if (!perfmon || typeof perfmon.counterMulti !== 'function') return [];
-    const paths = COUNTERS.map(([, p]) => p);
+    const paths = [...COUNTERS.map(([, p]) => p), MPS_PATH, DPS_PATH];
     let raw;
     try { raw = await perfmon.counterMulti(paths); } catch { return []; }
-    const mpsPath = '\\MSExchangeTransport Queues(_total)\\Messages Queued Per Second';
-    const dpsPath = '\\MSExchangeTransport Queues(_total)\\Deferred Messages Per Second';
-    const mps = Number(raw[mpsPath]); const dps = Number(raw[dpsPath]);
+    const mps = Number(raw[MPS_PATH]);
+    const dps = Number(raw[DPS_PATH]);
     const rows = [];
     for (const [kind, path] of COUNTERS) {
       const v = Number(raw[path]);

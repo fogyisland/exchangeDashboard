@@ -18,6 +18,5 @@
       "activation_preference": { "type": "int", "nullable": true }
     }
   },
-  "agent": { "intervalSec": 120, "timeoutMs": 30000 },
-  "roleFlags": 1
+  "agent": { "intervalSec": 120, "timeoutMs": 30000 }
 }

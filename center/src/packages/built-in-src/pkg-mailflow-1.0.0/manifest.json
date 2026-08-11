@@ -16,6 +16,5 @@
       "deferred_per_sec": { "type": "double", "nullable": true }
     }
   },
-  "agent": { "intervalSec": 60, "timeoutMs": 15000 },
-  "roleFlags": 3
+  "agent": { "intervalSec": 60, "timeoutMs": 15000 }
 }

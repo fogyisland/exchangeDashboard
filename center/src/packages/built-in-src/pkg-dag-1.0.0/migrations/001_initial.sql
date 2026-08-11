@@ -7,7 +7,5 @@ CREATE TABLE mdb_copy_status (
   mount_status INT NOT NULL,
   content_index_state INT NULL,
   is_active_copy INT NOT NULL,
-  activation_preference INT NULL,
-  PRIMARY KEY (agent_id, ts, db_id),
-  KEY idx_ts (ts)
+  activation_preference INT NULL
 );
