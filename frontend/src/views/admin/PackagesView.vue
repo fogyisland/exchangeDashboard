@@ -4,8 +4,29 @@
       <h2>Packages</h2>
     </header>
 
-    <el-tabs v-model="activeTab" class="packages-tabs" data-testid="packages-tabs">
-      <el-tab-pane label="Installed" name="installed">
+    <div class="packages-tabs" data-testid="packages-tabs">
+      <div class="tab-nav" role="tablist">
+        <button
+          type="button"
+          class="tab-button"
+          :class="{ active: activeTab === 'installed' }"
+          role="tab"
+          :aria-selected="activeTab === 'installed'"
+          data-testid="tab-installed"
+          @click="activeTab = 'installed'"
+        >Installed</button>
+        <button
+          type="button"
+          class="tab-button"
+          :class="{ active: activeTab === 'catalog' }"
+          role="tab"
+          :aria-selected="activeTab === 'catalog'"
+          data-testid="tab-catalog"
+          @click="activeTab = 'catalog'"
+        >Catalog</button>
+      </div>
+
+      <div class="tab-panel" v-show="activeTab === 'installed'" role="tabpanel">
         <PackageUpload :uploading="uploading" :error="error" @file-selected="onUpload" />
 
         <section v-if="packages.length === 0" class="panel empty-panel" data-testid="packages-empty">
@@ -30,56 +51,116 @@
             </tbody>
           </table>
         </section>
-      </el-tab-pane>
+      </div>
 
-      <el-tab-pane label="Catalog" name="catalog">
-        <div v-loading="loading">
-          <p v-if="catalog" class="catalog-summary">
-            Source: <el-tag>{{ catalog.source }}</el-tag>
-            ({{ catalog.packages.length }} packages)
-          </p>
+      <div class="tab-panel" v-show="activeTab === 'catalog'" role="tabpanel">
+        <div class="catalog-loading" v-if="loading">Loading catalog…</div>
 
-          <el-table v-if="catalog" :data="catalog.packages" stripe>
-            <el-table-column prop="name" label="Name" width="220" />
-            <el-table-column prop="version" label="Version" width="100" />
-            <el-table-column prop="title" label="Title" />
-            <el-table-column prop="summary" label="Summary" />
-            <el-table-column label="Role flags" width="100">
-              <template #default="{ row }">{{ describeRoleFlags(row.roleFlags) }}</template>
-            </el-table-column>
-            <el-table-column label="Install" width="220">
-              <template #default="{ row }">
-                <el-button size="small" :disabled="installing" @click="openInstallDialog(row)">Install on servers…</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
+        <p v-if="catalog" class="catalog-summary">
+          Source: <span class="status-pill status-installed">{{ catalog.source }}</span>
+          ({{ catalog.packages.length }} packages)
+        </p>
 
-          <h3 style="margin-top: 24px">Per-server install state</h3>
-          <el-table :data="installs" stripe>
-            <el-table-column prop="serverId" label="Server" width="100" />
-            <el-table-column prop="name" label="Package" width="200" />
-            <el-table-column prop="version" label="Version" width="100" />
-            <el-table-column label="Status" width="120">
-              <template #default="{ row }">
-                <el-tag :type="statusType(row.status, row.updatedAt)">{{ statusLabel(row.status, row.updatedAt) }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="error" label="Error" />
-          </el-table>
+        <section v-if="catalog" class="panel packages-list" data-testid="catalog-list">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 220px">Name</th>
+                <th style="width: 100px">Version</th>
+                <th>Title</th>
+                <th>Summary</th>
+                <th style="width: 100px">Role flags</th>
+                <th style="width: 220px">Install</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in catalog.packages" :key="row.name" :data-testid="`catalog-row-${row.name}`">
+                <td>{{ row.name }}</td>
+                <td>{{ row.version }}</td>
+                <td>{{ row.title }}</td>
+                <td>{{ row.summary }}</td>
+                <td>{{ describeRoleFlags(row.roleFlags) }}</td>
+                <td>
+                  <button
+                    type="button"
+                    class="btn-link"
+                    :disabled="installing"
+                    @click="openInstallDialog(row)"
+                  >Install on servers…</button>
+                </td>
+              </tr>
+              <tr v-if="catalog.packages.length === 0">
+                <td colspan="6" class="empty-row">No packages in catalog.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <h3 class="section-heading">Per-server install state</h3>
+        <section class="panel packages-list" data-testid="install-state-list">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 100px">Server</th>
+                <th style="width: 200px">Package</th>
+                <th style="width: 100px">Version</th>
+                <th style="width: 120px">Status</th>
+                <th>Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, idx) in installs" :key="`${row.serverId}-${row.name}-${idx}`">
+                <td>{{ row.serverId }}</td>
+                <td>{{ row.name }}</td>
+                <td>{{ row.version }}</td>
+                <td>
+                  <span :class="['status-pill', statusType(row.status, row.updatedAt)]">
+                    {{ statusLabel(row.status, row.updatedAt) }}
+                  </span>
+                </td>
+                <td>{{ row.error || '' }}</td>
+              </tr>
+              <tr v-if="installs.length === 0">
+                <td colspan="5" class="empty-row">No install records yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+    </div>
+
+    <div v-if="installDialogVisible" class="modal-backdrop" @click.self="installDialogVisible = false">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="install-dialog-title">
+        <div class="modal-header">
+          <h3 id="install-dialog-title">Install on servers</h3>
+          <button type="button" class="modal-close" aria-label="Close" @click="installDialogVisible = false">×</button>
         </div>
-
-        <el-dialog v-model="installDialogVisible" title="Install on servers" width="500px">
+        <div class="modal-body">
           <p>Select servers to install <strong>{{ installTarget?.name }}</strong> ({{ installTarget?.version }}):</p>
-          <el-checkbox-group v-model="installSelected">
-            <el-checkbox v-for="s in servers" :key="s.id" :label="s.id">{{ s.hostname }}</el-checkbox>
-          </el-checkbox-group>
-          <template #footer>
-            <el-button @click="installDialogVisible = false">Cancel</el-button>
-            <el-button type="primary" :loading="installing" @click="confirmInstall">Install</el-button>
-          </template>
-        </el-dialog>
-      </el-tab-pane>
-    </el-tabs>
+          <div class="server-checkboxes">
+            <label v-for="s in servers" :key="s.id" class="server-checkbox">
+              <input
+                type="checkbox"
+                :value="s.id"
+                :checked="installSelected.includes(s.id)"
+                @change="toggleServerSelection(s.id, $event.target.checked)"
+              />
+              <span>{{ s.hostname }}</span>
+            </label>
+            <p v-if="servers.length === 0" class="empty-row">No servers available.</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" @click="installDialogVisible = false">Cancel</button>
+          <button
+            type="button"
+            class="btn-primary"
+            :disabled="installing || installSelected.length === 0"
+            @click="confirmInstall"
+          >{{ installing ? 'Installing…' : 'Install' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -138,15 +219,21 @@ function isStalled(status, updated) {
 }
 
 function statusType(s, updated) {
-  if (s === 'installed') return 'success';
-  if (s === 'failed') return 'danger';
-  if (isStalled(s, updated)) return 'warning';
-  return 'info';
+  if (s === 'installed') return 'status-installed';
+  if (s === 'failed') return 'status-failed';
+  if (isStalled(s, updated)) return 'status-stalled';
+  return 'status-pending';
 }
 
 function statusLabel(s, updated) {
   if (isStalled(s, updated)) return 'stalled';
   return s;
+}
+
+function toggleServerSelection(id, checked) {
+  const set = new Set(installSelected.value);
+  if (checked) set.add(id); else set.delete(id);
+  installSelected.value = Array.from(set);
 }
 
 async function loadCatalog() {
@@ -202,11 +289,56 @@ onMounted(() => {
 .packages-view h2 { margin: 0 0 16px; color: var(--accent); font-size: 18px; }
 .view-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; background: var(--panel); padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; gap: 16px; flex-wrap: wrap; }
 .packages-tabs { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px 16px; }
+
+.tab-nav { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.tab-button { background: transparent; border: none; padding: 8px 16px; cursor: pointer; color: var(--muted); font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab-button:hover { color: var(--accent); }
+.tab-button.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-button:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.tab-panel { padding-top: 8px; }
+
 .empty-panel { padding: 32px; text-align: center; }
 .empty-title { color: var(--accent); font-size: 16px; font-weight: 600; margin: 0 0 12px; }
 .empty-body { color: var(--muted); font-size: 13px; }
+.empty-row { color: var(--muted); text-align: center; padding: 16px; font-style: italic; }
+
 .packages-list table { width: 100%; border-collapse: collapse; }
 .packages-list th, .packages-list td { padding: 8px; text-align: left; border-bottom: 1px solid var(--border); }
 .packages-list th { color: var(--muted); font-weight: 600; font-size: 12px; }
+
 .catalog-summary { color: var(--muted); margin: 0 0 12px; }
+.catalog-loading { color: var(--muted); padding: 12px 0; font-style: italic; }
+.section-heading { margin-top: 24px; margin-bottom: 12px; color: var(--accent); font-size: 15px; font-weight: 600; }
+
+.status-pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; text-transform: capitalize; border: 1px solid transparent; }
+.status-installed { background: rgba(46, 160, 67, 0.15); color: #2ea043; border-color: rgba(46, 160, 67, 0.4); }
+.status-failed { background: rgba(220, 50, 50, 0.15); color: #d63232; border-color: rgba(220, 50, 50, 0.4); }
+.status-pending { background: rgba(56, 139, 232, 0.15); color: #388be8; border-color: rgba(56, 139, 232, 0.4); }
+.status-stalled { background: rgba(200, 130, 30, 0.15); color: #c8821e; border-color: rgba(200, 130, 30, 0.4); }
+
+.btn-link { background: transparent; border: none; color: var(--accent); cursor: pointer; padding: 4px 8px; font-size: 13px; text-decoration: underline; }
+.btn-link:hover { color: var(--accent-strong, #fff); }
+.btn-link:disabled { color: var(--muted); cursor: not-allowed; text-decoration: none; }
+.btn-link:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; min-width: 400px; max-width: 600px; width: 500px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.modal-header h3 { margin: 0; color: var(--accent); font-size: 16px; }
+.modal-close { background: transparent; border: none; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 4px 8px; }
+.modal-close:hover { color: var(--accent); }
+.modal-body { padding: 16px; overflow-y: auto; }
+.modal-body p { margin: 0 0 12px; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+.btn-primary, .btn-secondary { padding: 6px 14px; border-radius: 4px; font-size: 13px; cursor: pointer; border: 1px solid transparent; font-weight: 500; }
+.btn-primary { background: var(--accent); color: var(--accent-contrast, #fff); border-color: var(--accent); }
+.btn-primary:hover { filter: brightness(1.1); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-secondary { background: transparent; color: var(--muted); border-color: var(--border); }
+.btn-secondary:hover { color: var(--accent); border-color: var(--accent); }
+
+.server-checkboxes { display: flex; flex-direction: column; gap: 6px; }
+.server-checkbox { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 4px 0; }
+.server-checkbox input { cursor: pointer; }
 </style>
