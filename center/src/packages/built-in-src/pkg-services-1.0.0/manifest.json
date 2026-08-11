@@ -1,0 +1,19 @@
+{
+  "name": "pkg-services",
+  "version": "1.0.0",
+  "description": "Windows service state for MSExchange* services",
+  "author": "ExDashboard",
+  "type": "status",
+  "database": {
+    "metricTable": "windows_service",
+    "metricColumns": {
+      "agent_id": { "type": "varchar(64)" },
+      "ts": { "type": "datetime" },
+      "service_name": { "type": "varchar(128)" },
+      "state": { "type": "varchar(32)" },
+      "start_mode": { "type": "varchar(32)" }
+    }
+  },
+  "agent": { "intervalSec": 60, "timeoutMs": 10000 },
+  "roleFlags": 7
+}

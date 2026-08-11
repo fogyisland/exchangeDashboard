@@ -1,0 +1,20 @@
+{
+  "name": "pkg-perfmon",
+  "version": "1.0.0",
+  "description": "Host-level CPU, memory, disk C: free %, net throughput",
+  "author": "ExDashboard",
+  "type": "timeseries",
+  "database": {
+    "metricTable": "host_resources",
+    "metricColumns": {
+      "agent_id": { "type": "varchar(64)" },
+      "ts": { "type": "datetime" },
+      "cpu_pct": { "type": "double", "nullable": true },
+      "memory_available_mb": { "type": "int", "nullable": true },
+      "disk_c_free_pct": { "type": "double", "nullable": true },
+      "net_bytes_per_sec": { "type": "double", "nullable": true }
+    }
+  },
+  "agent": { "intervalSec": 60, "timeoutMs": 10000 },
+  "roleFlags": 7
+}

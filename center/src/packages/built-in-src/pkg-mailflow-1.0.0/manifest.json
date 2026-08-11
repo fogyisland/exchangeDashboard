@@ -1,0 +1,21 @@
+{
+  "name": "pkg-mailflow",
+  "version": "1.0.0",
+  "description": "Mailflow transport queue depth + throughput from MSExchangeTransport perfmon",
+  "author": "ExDashboard",
+  "type": "timeseries",
+  "database": {
+    "metricTable": "mailflow_queue",
+    "metricColumns": {
+      "agent_id": { "type": "varchar(64)" },
+      "ts": { "type": "datetime" },
+      "queue_kind": { "type": "varchar(64)" },
+      "queue_name": { "type": "varchar(64)" },
+      "message_count": { "type": "int" },
+      "messages_per_sec": { "type": "double", "nullable": true },
+      "deferred_per_sec": { "type": "double", "nullable": true }
+    }
+  },
+  "agent": { "intervalSec": 60, "timeoutMs": 15000 },
+  "roleFlags": 3
+}

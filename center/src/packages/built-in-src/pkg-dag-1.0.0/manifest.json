@@ -1,0 +1,23 @@
+{
+  "name": "pkg-dag",
+  "version": "1.0.0",
+  "description": "Mailbox database copy status + replay lag from MDB replication perfmon",
+  "author": "ExDashboard",
+  "type": "timeseries",
+  "database": {
+    "metricTable": "mdb_copy_status",
+    "metricColumns": {
+      "agent_id": { "type": "varchar(64)" },
+      "ts": { "type": "datetime" },
+      "db_id": { "type": "varchar(64)" },
+      "copy_queue_length": { "type": "int" },
+      "replay_lag_seconds": { "type": "double", "nullable": true },
+      "mount_status": { "type": "int" },
+      "content_index_state": { "type": "int", "nullable": true },
+      "is_active_copy": { "type": "int" },
+      "activation_preference": { "type": "int", "nullable": true }
+    }
+  },
+  "agent": { "intervalSec": 120, "timeoutMs": 30000 },
+  "roleFlags": 1
+}
